@@ -1,22 +1,29 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { t } from '@/lib/i18n';
 import type { Language, Project } from '@/lib/types';
 import { navigate } from '@/lib/router';
-import { CodeBlock } from './CodeBlock';
 import { CategoryBadge } from './CategoryBadge';
 import { formatDate, formatTime, copyToClipboard } from '@/lib/utils';
 import { downloadProjectZip, downloadProjectJson, createShareUrl } from '@/lib/download';
+
+const CodeEditorView = lazy(() => import('./CodeEditorView').then((m) => ({ default: m.CodeEditorView })));
+const CommentSection = lazy(() => import('./CommentSection').then((m) => ({ default: m.CommentSection })));
+
+function PanelLoader() {
+  return (
+    <div className="admin-empty"><i className="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>
+  );
+}
 
 interface ProjectResultProps {
   project: Project;
   lang: Language;
 }
 
-type Tab = 'summary' | 'structure' | 'files' | 'install' | 'download' | 'analysis';
+type Tab = 'summary' | 'structure' | 'files' | 'install' | 'download' | 'analysis' | 'comments';
 
 export function ProjectResult({ project, lang }: ProjectResultProps) {
   const [tab, setTab] = useState<Tab>('summary');
-  const [activeFile, setActiveFile] = useState(0);
   const [shareCopied, setShareCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -47,6 +54,7 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
     { id: 'install', label: t('install_guide', lang), icon: 'fa-list-check' },
     { id: 'download', label: t('download_package', lang), icon: 'fa-download' },
     { id: 'analysis', label: t('performance_seo', lang), icon: 'fa-chart-line' },
+    { id: 'comments', label: t('comments', lang), icon: 'fa-comments' },
   ];
 
   return (
@@ -149,32 +157,10 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
           )}
 
           {tab === 'files' && (
-            <div className="files-panel">
-              <div className="files-sidebar">
-                <h4>{t('code_files', lang)}</h4>
-                <ul className="file-list">
-                  {project.files.map((f, i) => (
-                    <li
-                      key={f.path}
-                      className={`file-item ${activeFile === i ? 'active' : ''}`}
-                      onClick={() => setActiveFile(i)}
-                    >
-                      <i className="fa-regular fa-file-code"></i>
-                      <span>{f.path}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="files-content">
-                {project.files[activeFile] && (
-                  <CodeBlock
-                    path={project.files[activeFile].path}
-                    content={project.files[activeFile].content}
-                    language={project.files[activeFile].language}
-                    lang={lang}
-                  />
-                )}
-              </div>
+            <div className="files-panel files-panel-editor">
+              <Suspense fallback={<PanelLoader />}>
+                <CodeEditorView project={project} lang={lang} />
+              </Suspense>
             </div>
           )}
 
@@ -255,6 +241,14 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
                   ? 'OWASP Top 10 koruması: SQL injection önlenmiş, XSS koruması, input validation, CORS yapılandırılmış.'
                   : 'OWASP Top 10 protection: SQL injection prevented, XSS protection, input validation, CORS configured.'}</p>
               </div>
+            </div>
+          )}
+
+          {tab === 'comments' && (
+            <div className="comments-panel">
+              <Suspense fallback={<PanelLoader />}>
+                <CommentSection projectId={project.id} lang={lang} />
+              </Suspense>
             </div>
           )}
         </div>

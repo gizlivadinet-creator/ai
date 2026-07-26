@@ -7,9 +7,8 @@ import type { Language, Profile, Comment, Project, SiteSetting, AuditLogEntry } 
 type Tab = 'users' | 'comments' | 'projects' | 'settings' | 'audit';
 
 export function AdminView({ lang }: { lang: Language }) {
-  const { user, isAdmin, loading: authLoading, refreshProfile } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const [tab, setTab] = useState<Tab>('users');
-  const [bootstrapping, setBootstrapping] = useState(false);
 
   if (authLoading) {
     return (
@@ -20,34 +19,10 @@ export function AdminView({ lang }: { lang: Language }) {
   }
 
   if (!isAdmin) {
-    // Bootstrap problem: `admin_set_role` can only be called by an existing
-    // admin, but right after the schema migration runs nobody is one yet.
-    // This RPC is a one-time escape hatch — it only succeeds while the
-    // `profiles` table has zero admins, and is a no-op on every call after
-    // the first, so it's safe to leave the button in place permanently.
-    async function becomeFirstAdmin() {
-      if (!user) return;
-      setBootstrapping(true);
-      const { data, error } = await supabase.rpc('admin_bootstrap_first_admin');
-      setBootstrapping(false);
-      if (error) { alert(error.message); return; }
-      if (!data) {
-        alert(lang === 'tr' ? 'Zaten bir yönetici var; bu işlem tek seferliktir.' : 'An admin already exists; this is a one-time action.');
-        return;
-      }
-      await refreshProfile();
-    }
-
     return (
       <div className="empty-state">
         <i className="fa-solid fa-lock fa-3x"></i>
         <h3>{t('no_permission', lang)}</h3>
-        {user && (
-          <button className="btn-generate" disabled={bootstrapping} onClick={becomeFirstAdmin} style={{ marginTop: 16 }}>
-            {bootstrapping ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <i className="fa-solid fa-user-shield"></i>}
-            {lang === 'tr' ? 'İlk yönetici hesabı hiç yoksa, beni yönetici yap' : 'If no admin exists yet, make me the admin'}
-          </button>
-        )}
       </div>
     );
   }
@@ -101,20 +76,18 @@ function UsersTab({ lang }: { lang: Language }) {
 
   async function toggleBan(u: Profile) {
     if (!u.is_banned && !confirm(t('confirm_ban', lang))) return;
-    const { error } = u.is_banned
-      ? await supabase.rpc('admin_unban_user', { target_user: u.id })
-      : await supabase.rpc('admin_ban_user', {
-          target_user: u.id,
-          reason: prompt(lang === 'tr' ? 'Ban sebebi (opsiyonel):' : 'Ban reason (optional):') || '',
-        });
-    if (error) { console.error('toggleBan failed:', error); alert(error.message); return; }
+    if (u.is_banned) {
+      await supabase.rpc('admin_unban_user', { target_user: u.id });
+    } else {
+      const reason = prompt(lang === 'tr' ? 'Ban sebebi (opsiyonel):' : 'Ban reason (optional):') || '';
+      await supabase.rpc('admin_ban_user', { target_user: u.id, reason });
+    }
     load();
   }
 
   async function toggleRole(u: Profile) {
     const newRole = u.role === 'admin' ? 'user' : 'admin';
-    const { error } = await supabase.rpc('admin_set_role', { target_user: u.id, new_role: newRole });
-    if (error) { console.error('toggleRole failed:', error); alert(error.message); return; }
+    await supabase.rpc('admin_set_role', { target_user: u.id, new_role: newRole });
     load();
   }
 
@@ -189,8 +162,7 @@ function CommentsTab({ lang }: { lang: Language }) {
 
   async function remove(id: string) {
     if (!confirm(t('confirm_delete_comment', lang))) return;
-    const { error } = await supabase.from('comments').delete().eq('id', id);
-    if (error) { console.error('delete comment failed:', error); alert(error.message); return; }
+    await supabase.from('comments').delete().eq('id', id);
     load();
   }
 
@@ -244,8 +216,7 @@ function ProjectsTab({ lang }: { lang: Language }) {
 
   async function remove(id: string) {
     if (!confirm(t('confirm_delete', lang))) return;
-    const { error } = await supabase.from('projects').delete().eq('id', id);
-    if (error) { console.error('delete project failed:', error); alert(error.message); return; }
+    await supabase.from('projects').delete().eq('id', id);
     load();
   }
 
