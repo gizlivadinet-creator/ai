@@ -27,23 +27,19 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: ai/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./ai
         run: npm ci
 
       - name: Sync knowledge pool to /data/
-        working-directory: ./ai
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/sync-data.mjs
 
       - name: Build
-        working-directory: ./ai
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -55,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./ai/dist
+          path: ./dist
 
   deploy:
     needs: build
