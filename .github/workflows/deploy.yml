@@ -28,36 +28,50 @@ jobs:
       VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Verify Repository
+        run: |
+          pwd
+          ls -la
+          ls -la scripts
+          ls -la public
+          ls -la public/data || true
 
       - name: Export Supabase Data
-        run: node sync-data.mjs
+        run: node ./scripts/sync-data.mjs
 
       - name: Verify Export
         run: |
-          echo "public/data"
+          echo "===== public/data ====="
           ls -lah public/data
           test -f public/data/projects.json
           test -f public/data/projects.json.gz
           test -f public/data/index.json
 
-      - run: npm run build
+      - name: Build Project
+        run: npm run build
 
       - name: Verify Dist
         run: |
           ls -lah dist
-          ls -lah dist/data
+          ls -lah dist/data || true
 
-      - uses: actions/configure-pages@v5
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
@@ -70,5 +84,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
