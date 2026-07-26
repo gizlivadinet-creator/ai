@@ -162,6 +162,12 @@ body {
   display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
 }
 
+.info-banner {
+  margin-top: 20px; padding: 12px 16px; border-radius: var(--radius-sm);
+  background: var(--primary-soft); color: var(--primary-dark); border: 1px solid #f3ddd2;
+  display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
+}
+
 .loading-bar { margin-top: 24px; height: 3px; background: var(--bg-alt); border-radius: 100px; overflow: hidden; }
 .loading-bar-fill {
   height: 100%; width: 40%;

@@ -14,11 +14,11 @@ function App() {
   useFontAwesome();
   const route = useRouter();
   const [lang, setLang] = useState<Language>(() => {
-    return (localStorage.getItem('claudia-lang') as Language) || 'tr';
+    return (localStorage.getItem('immaculate-lang') as Language) || 'tr';
   });
 
   useEffect(() => {
-    localStorage.setItem('claudia-lang', lang);
+    localStorage.setItem('immaculate-lang', lang);
     document.documentElement.lang = lang;
   }, [lang]);
 
@@ -54,7 +54,7 @@ function App() {
           <div className="footer-inner">
             <div className="footer-brand">
               <i className="fa-solid fa-code"></i>
-              <span>Claudia<span className="logo-accent">AI</span></span>
+              <span>Immaculate<span className="logo-accent">AI</span></span>
             </div>
             <p>{t('footer_text', lang)}</p>
             <p className="footer-sources">{t('sources_desc', lang)}</p>
