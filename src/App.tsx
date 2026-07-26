@@ -3,11 +3,13 @@ import { useFontAwesome } from '@/lib/fontawesome';
 import { useRouter } from '@/lib/router';
 import { t } from '@/lib/i18n';
 import type { Language } from '@/lib/types';
+import { AuthProvider } from '@/lib/auth';
 import { Header } from '@/components/Header';
 import { HomeView } from '@/components/HomeView';
 import { LibraryView } from '@/components/LibraryView';
 import { ProjectResult } from '@/components/ProjectResult';
 import { AboutView } from '@/components/AboutView';
+import { AdminView } from '@/components/AdminView';
 import { useProject } from '@/lib/hooks';
 
 function App() {
@@ -25,7 +27,8 @@ function App() {
   const currentView = route.name === 'home' ? 'home'
     : route.name === 'library' ? 'library'
     : route.name === 'about' ? 'about'
-    : route.name === 'project' ? 'project' : 'home';
+    : route.name === 'project' ? 'project'
+    : route.name === 'admin' ? 'admin' : 'home';
 
   function renderRoute() {
     switch (route.name) {
@@ -35,6 +38,8 @@ function App() {
         return <LibraryView lang={lang} />;
       case 'about':
         return <AboutView lang={lang} />;
+      case 'admin':
+        return <AdminView lang={lang} />;
       case 'project': {
         return <ProjectLoader slug={route.slug} lang={lang} />;
       }
@@ -44,24 +49,26 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <Header lang={lang} onLangChange={setLang} current={currentView as 'home' | 'library' | 'about' | 'project'} />
-      <main role="main" className="main">
-        {renderRoute()}
-      </main>
-      <footer className="footer" role="contentinfo">
-        <div className="container">
-          <div className="footer-inner">
-            <div className="footer-brand">
-              <i className="fa-solid fa-code"></i>
-              <span>Immaculate<span className="logo-accent">AI</span></span>
+    <AuthProvider>
+      <div className="app">
+        <Header lang={lang} onLangChange={setLang} current={currentView as 'home' | 'library' | 'about' | 'project' | 'admin'} />
+        <main role="main" className="main">
+          {renderRoute()}
+        </main>
+        <footer className="footer" role="contentinfo">
+          <div className="container">
+            <div className="footer-inner">
+              <div className="footer-brand">
+                <i className="fa-solid fa-code"></i>
+                <span>Immaculate<span className="logo-accent">AI</span></span>
+              </div>
+              <p>{t('footer_text', lang)}</p>
+              <p className="footer-sources">{t('sources_desc', lang)}</p>
             </div>
-            <p>{t('footer_text', lang)}</p>
-            <p className="footer-sources">{t('sources_desc', lang)}</p>
           </div>
-        </div>
-      </footer>
-    </div>
+        </footer>
+      </div>
+    </AuthProvider>
   );
 }
 
