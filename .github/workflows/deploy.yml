@@ -20,9 +20,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./ai
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,18 +29,21 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: ./ai/package-lock.json
+          cache-dependency-path: ai/package-lock.json
 
       - name: Install dependencies
+        working-directory: ./ai
         run: npm ci
 
       - name: Sync knowledge pool to /data/
+        working-directory: ./ai
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/sync-data.mjs
 
       - name: Build
+        working-directory: ./ai
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
