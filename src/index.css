@@ -36,14 +36,6 @@
 
 html { scroll-behavior: smooth; }
 
-/* Safety net: with the Google sign-in button + full header nav in one
-   unbroken flex row (see .header-inner), a long label like "Google ile
-   Giriş Yap" doesn't fit on narrow phones and used to push the whole page
-   wider than the viewport, forcing a horizontal scroll that cut off content
-   on every section (the "tema bozuldu" report). The media queries further
-   below fix the header itself; this is a backstop against any future overflow. */
-html, body { max-width: 100%; overflow-x: hidden; }
-
 body {
   font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   color: var(--text);
@@ -604,23 +596,6 @@ body {
   .download-panel { grid-template-columns: 1fr; }
 }
 
-/* Header never overflows: the logo/nav/lang toggle/sign-in button used to
-   sit in one unbreakable flex row with no shrink rules, so on narrow phones
-   the row was wider than the screen and forced the whole page to scroll
-   horizontally (cutting off content on the left, as reported). */
-@media (max-width: 640px) {
-  .logo-text { font-size: 1.05rem; }
-  .header-right { gap: 8px; }
-  .lang-toggle span { display: none; }
-  .lang-toggle { padding: 7px 9px; }
-  .btn-google-signin span { display: none; }
-  .btn-google-signin { padding: 8px 10px; }
-  .user-name { display: none; }
-}
-@media (max-width: 380px) {
-  .logo-text { display: none; }
-}
-
 /* ===== AUTH / USER MENU ===== */
 .nav-link-admin { color: var(--error); }
 .nav-link-admin.active, .nav-link-admin:hover { color: var(--error); background: rgba(192,57,43,0.08); }
@@ -760,22 +735,6 @@ body {
 }
 .admin-toggle.on::after { transform: translateX(20px); }
 
-/* ===== AUTH CALLBACK ERROR BANNER ===== */
-.auth-error-banner {
-  background: #fdecea; border-bottom: 1px solid rgba(192,57,43,0.25);
-}
-.auth-error-banner-inner {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 24px; font-size: 0.85rem; color: var(--error);
-}
-.auth-error-banner-inner i:first-child { flex-shrink: 0; }
-.auth-error-banner-inner span { flex: 1; }
-.auth-error-banner-inner button {
-  background: none; border: none; color: var(--error); cursor: pointer;
-  padding: 4px; opacity: 0.7; flex-shrink: 0;
-}
-.auth-error-banner-inner button:hover { opacity: 1; }
-
 /* ===== AUTH GATE OVERLAY ===== */
 .auth-gate-overlay {
   position: absolute; inset: 0; z-index: 10;
@@ -787,3 +746,184 @@ body {
 .auth-gate-overlay i { font-size: 1.8rem; color: var(--primary); }
 .auth-gate-overlay p { font-weight: 600; color: var(--text); max-width: 360px; }
 .auth-gate-overlay-banned i { color: var(--error); }
+
+/* ===== COLLABORATIVE CODE EDITOR ===== */
+.files-panel-editor { display: block; }
+.editor-view {
+  display: grid; grid-template-columns: 260px 1fr;
+  border: 1px solid var(--border-soft); border-radius: var(--radius);
+  overflow: hidden; background: var(--bg);
+}
+.editor-sidebar {
+  border-right: 1px solid var(--border-soft); background: var(--bg-alt);
+  display: flex; flex-direction: column; max-height: 640px;
+}
+.editor-sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 8px;
+}
+.editor-sidebar-header h4 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.editor-icon-btn {
+  width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); transition: all var(--transition);
+}
+.editor-icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.editor-sidebar .file-list { overflow-y: auto; flex: 1; padding: 0 8px 8px; }
+.file-item-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item-saving { font-size: 0.7rem; color: var(--primary); }
+.file-item-delete {
+  opacity: 0; border: none; background: none; cursor: pointer; color: var(--error);
+  padding: 2px 4px; transition: opacity var(--transition);
+}
+.file-item:hover .file-item-delete { opacity: 1; }
+
+.editor-collaborators { padding: 12px 16px; border-top: 1px solid var(--border-soft); }
+.editor-collaborators-label { font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.03em; }
+.editor-collaborators-list { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.editor-collaborator { position: relative; width: 28px; height: 28px; }
+.editor-collaborator img, .editor-collaborator .user-avatar-fallback {
+  width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--bg); display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem;
+}
+.editor-collaborator-dot {
+  position: absolute; bottom: 0; right: 0; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--success); border: 2px solid var(--bg);
+}
+
+.editor-main { display: flex; flex-direction: column; min-width: 0; }
+.editor-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-alt); gap: 12px; flex-wrap: wrap;
+}
+.editor-toolbar-path { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.editor-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.editor-save-status { font-size: 0.75rem; display: flex; align-items: center; gap: 5px; font-weight: 600; }
+.editor-save-status.saving { color: var(--warning); }
+.editor-save-status.saved { color: var(--success); }
+.editor-monaco-wrap { position: relative; }
+.editor-readonly-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; background: rgba(217,119,87,0.08); color: var(--primary-dark);
+  font-size: 0.82rem; font-weight: 600;
+}
+
+/* ===== MODALS (add file / sandbox) ===== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(20,18,17,0.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px; backdrop-filter: blur(2px);
+}
+.modal-card {
+  background: var(--bg); border-radius: var(--radius-lg); padding: 24px;
+  width: 100%; max-width: 420px; box-shadow: var(--shadow-lg);
+}
+.modal-card h3 { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 1.1rem; }
+.modal-input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 0.92rem; margin-bottom: 16px;
+}
+.modal-input:focus { outline: none; border-color: var(--primary); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.modal-card-lg { max-width: 900px; }
+.modal-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.modal-card-header h3 { margin: 0; }
+.sandbox-note { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; }
+.sandbox-frame {
+  width: 100%; height: 480px; border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); background: #fff;
+}
+
+@media (max-width: 900px) {
+  .editor-view { grid-template-columns: 1fr; }
+  .editor-sidebar { max-height: 220px; border-right: none; border-bottom: 1px solid var(--border-soft); }
+}
+
+/* ===== COMMENTS ===== */
+.comments-panel { padding: 8px 0 40px; }
+.comments-section { max-width: 760px; }
+.comments-title { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; margin-bottom: 20px; }
+.comments-title i { color: var(--primary); }
+
+.comment-login-gate {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 16px 18px; border-radius: var(--radius); background: var(--bg-soft);
+  border: 1px solid var(--border-soft); margin-bottom: 24px; font-weight: 600; font-size: 0.9rem;
+}
+.comment-login-gate i { color: var(--primary); font-size: 1.1rem; }
+.comment-login-gate-banned { background: rgba(192,57,43,0.06); }
+.comment-login-gate-banned i { color: var(--error); }
+
+.comment-composer {
+  border: 1px solid var(--border-soft); border-radius: var(--radius);
+  padding: 14px; margin-bottom: 28px; background: var(--bg);
+}
+.comment-composer-toolbar { display: flex; gap: 4px; margin-bottom: 8px; }
+.comment-composer-toolbar button {
+  width: 30px; height: 30px; border: none; background: var(--bg-soft);
+  border-radius: var(--radius-sm); cursor: pointer; color: var(--text-muted);
+  transition: all var(--transition);
+}
+.comment-composer-toolbar button:hover { color: var(--primary); background: var(--primary-soft); }
+.comment-composer textarea {
+  width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; font-family: inherit; font-size: 0.9rem; resize: vertical;
+}
+.comment-composer textarea:focus { outline: none; border-color: var(--primary); }
+.comment-media-url-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.comment-media-url-row input {
+  flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem;
+}
+.comment-uploading { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; display: flex; gap: 6px; align-items: center; }
+.comment-media-preview { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.comment-media-preview-item { position: relative; width: 60px; height: 60px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
+.comment-media-preview-item img { width: 100%; height: 100%; object-fit: cover; }
+.comment-media-preview-item i { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: var(--text-muted); }
+.comment-media-preview-item button {
+  position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 0.6rem; cursor: pointer;
+}
+.comment-composer-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+
+.comment-list { display: flex; flex-direction: column; gap: 20px; }
+.comment-item { border-bottom: 1px solid var(--border-soft); padding-bottom: 18px; }
+.comment-body { display: flex; gap: 12px; }
+.comment-body.nested { margin-top: 14px; }
+.comment-content { flex: 1; min-width: 0; }
+.comment-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.comment-author { font-weight: 700; font-size: 0.88rem; }
+.comment-date { font-size: 0.75rem; color: var(--text-light); }
+.comment-admin-delete {
+  margin-left: auto; border: none; background: none; color: var(--text-light);
+  cursor: pointer; padding: 4px 6px; border-radius: 6px;
+}
+.comment-admin-delete:hover { color: var(--error); background: rgba(192,57,43,0.08); }
+.comment-text { font-size: 0.9rem; line-height: 1.6; }
+.comment-text p { margin-bottom: 8px; }
+.comment-text code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+.comment-text a { color: var(--primary); }
+.comment-media-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.comment-media-image { max-width: 260px; max-height: 200px; border-radius: var(--radius-sm); object-fit: cover; }
+.comment-embed-wrap { position: relative; width: 320px; }
+.comment-embed-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 2; background: rgba(0,0,0,0.65); color: #fff;
+  font-size: 0.65rem; padding: 2px 8px; border-radius: 999px; text-transform: capitalize; display: flex; gap: 4px; align-items: center;
+}
+.comment-embed-frame { width: 320px; height: 200px; border: none; border-radius: var(--radius-sm); background: #000; }
+.comment-embed-fallback { display: flex; align-items: center; gap: 6px; color: var(--primary); font-size: 0.85rem; }
+
+.comment-actions { margin-left: 52px; margin-top: 4px; }
+.comment-action-btn {
+  border: none; background: none; color: var(--text-muted); font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; display: inline-flex; gap: 5px; align-items: center; padding: 4px 6px;
+}
+.comment-action-btn:hover { color: var(--primary); }
+.comment-reply-composer { margin-left: 52px; margin-top: 10px; }
+.comment-replies { margin-left: 52px; display: flex; flex-direction: column; }
+
+@media (max-width: 640px) {
+  .comment-embed-frame, .comment-embed-wrap { width: 100%; }
+  .comment-actions, .comment-reply-composer, .comment-replies { margin-left: 0; }
+}
