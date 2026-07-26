@@ -14,6 +14,10 @@ export function CodeBlock({ path, content, language, lang }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
 
+  useEffect(() => {
+    preRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [path]);
+
   async function handleCopy() {
     await copyToClipboard(content);
     setCopied(true);

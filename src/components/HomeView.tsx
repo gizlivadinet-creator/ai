@@ -54,7 +54,7 @@ const QUICK_PROMPTS: Record<string, { tr: string; en: string; icon: string }> = 
 
 export function HomeView({ lang }: HomeViewProps) {
   const [prompt, setPrompt] = useState('');
-  const { loading, error, result, generate } = useGenerate();
+  const { loading, error, duplicate, result, generate } = useGenerate();
   const { stats } = useStats();
 
   async function handleGenerate() {
@@ -127,7 +127,14 @@ export function HomeView({ lang }: HomeViewProps) {
           {error && (
             <div className="error-banner">
               <i className="fa-solid fa-circle-exclamation"></i>
-              {t(error, lang) || t('error_generate', lang)}
+              {t(error, lang)}
+            </div>
+          )}
+
+          {!error && duplicate && (
+            <div className="info-banner">
+              <i className="fa-solid fa-circle-info"></i>
+              {t('duplicate_found', lang)}
             </div>
           )}
 
@@ -141,7 +148,7 @@ export function HomeView({ lang }: HomeViewProps) {
             <div className="sources-loading">
               <p>{t('generating_desc', lang)}</p>
               <div className="sources-list">
-                {['Qwen Coder', 'DeepSeek Coder', 'Code Llama', 'StarCoder2', 'GitHub', 'NPM', 'PyPI'].map((s) => (
+                {['Best Practices', 'Security Rules', 'Style Guides', 'GitHub', 'GitLab', 'NPM', 'PyPI'].map((s) => (
                   <span key={s} className="source-chip">
                     <i className="fa-solid fa-circle-check"></i> {s}
                   </span>

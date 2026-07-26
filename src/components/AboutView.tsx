@@ -18,7 +18,7 @@ export function AboutView({ lang }: AboutViewProps) {
         </h1>
         <div className="about-content">
           <section className="about-section">
-            <h2><i className="fa-solid fa-robot"></i> Claudia AI</h2>
+            <h2><i className="fa-solid fa-robot"></i> Immaculate AI</h2>
             <p>{t('welcome_desc', lang)}</p>
           </section>
 
@@ -26,7 +26,7 @@ export function AboutView({ lang }: AboutViewProps) {
             <h2><i className="fa-solid fa-microscope"></i> {t('research_sources', lang)}</h2>
             <p>{t('sources_desc', lang)}</p>
             <div className="sources-grid">
-              {['Qwen Coder', 'DeepSeek Coder', 'Code Llama', 'StarCoder2', 'GitHub', 'GitLab', 'Bitbucket', 'NPM', 'PyPI', 'Maven Central'].map((s) => (
+              {['Best Practices', 'Security Standards', 'Style Guides', 'GitHub', 'GitLab', 'Bitbucket', 'NPM', 'PyPI', 'Maven Central'].map((s) => (
                 <span key={s} className="source-tag">{s}</span>
               ))}
             </div>

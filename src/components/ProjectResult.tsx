@@ -237,14 +237,14 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
                   <i className="fa-solid fa-gauge-high"></i>
                   <h3>{lang === 'tr' ? 'Performans Analizi' : 'Performance Analysis'}</h3>
                 </div>
-                <p>{(project as unknown as { performance_analysis?: string }).performance_analysis || t('optimized', lang)}</p>
+                <p>{project.performance_analysis || t('optimized', lang)}</p>
               </div>
               <div className="analysis-card">
                 <div className="analysis-header">
                   <i className="fa-solid fa-magnifying-glass-chart"></i>
                   <h3>{lang === 'tr' ? 'SEO Analizi' : 'SEO Analysis'}</h3>
                 </div>
-                <p>{(project as unknown as { seo_analysis?: string }).seo_analysis || t('ready', lang)}</p>
+                <p>{project.seo_analysis || t('ready', lang)}</p>
               </div>
               <div className="analysis-card">
                 <div className="analysis-header">

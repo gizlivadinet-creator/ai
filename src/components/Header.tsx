@@ -15,7 +15,7 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
       <div className="header-inner">
         <a href="#/" className="logo" onClick={() => navigate('/')}>
           <i className="fa-solid fa-code logo-icon"></i>
-          <span className="logo-text">Claudia<span className="logo-accent">AI</span></span>
+          <span className="logo-text">Immaculate<span className="logo-accent">AI</span></span>
         </a>
 
         <nav className="nav" aria-label={t('nav_library', lang)}>
