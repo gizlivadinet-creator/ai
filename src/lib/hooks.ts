@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase, getOwnerToken } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { slugify } from '@/lib/utils';
 import { generateProject } from '@/lib/generator';
 import type { GenerationResult, Project } from '@/lib/types';
@@ -20,6 +20,12 @@ export function useGenerate() {
     setError(null);
     setDuplicate(false);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        setError('login_required_generate');
+        return null;
+      }
+
       // The knowledge pool is meant to deduplicate identical requests
       // (see AboutView / i18n "duplicate_found") — previously nothing
       // actually checked for this and every submission created a new row.
@@ -57,7 +63,6 @@ export function useGenerate() {
           tags: generated.tags,
           performance_analysis: generated.performance_analysis,
           seo_analysis: generated.seo_analysis,
-          owner_token: getOwnerToken(),
         })
         .select()
         .single();

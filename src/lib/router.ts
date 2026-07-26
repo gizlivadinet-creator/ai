@@ -4,7 +4,8 @@ export type Route =
   | { name: 'home' }
   | { name: 'library' }
   | { name: 'project'; slug: string }
-  | { name: 'about' };
+  | { name: 'about' }
+  | { name: 'admin' };
 
 function parse(): Route {
   const hash = window.location.hash.replace(/^#\/?/, '');
@@ -12,6 +13,7 @@ function parse(): Route {
   if (parts.length === 0) return { name: 'home' };
   if (parts[0] === 'library') return { name: 'library' };
   if (parts[0] === 'about') return { name: 'about' };
+  if (parts[0] === 'admin') return { name: 'admin' };
   if (parts[0] === 'p' && parts[1]) return { name: 'project', slug: parts[1] };
   return { name: 'home' };
 }
