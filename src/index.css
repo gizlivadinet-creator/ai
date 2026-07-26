@@ -36,6 +36,14 @@
 
 html { scroll-behavior: smooth; }
 
+/* Safety net: with the Google sign-in button + full header nav in one
+   unbroken flex row (see .header-inner), a long label like "Google ile
+   Giriş Yap" doesn't fit on narrow phones and used to push the whole page
+   wider than the viewport, forcing a horizontal scroll that cut off content
+   on every section (the "tema bozuldu" report). The media queries further
+   below fix the header itself; this is a backstop against any future overflow. */
+html, body { max-width: 100%; overflow-x: hidden; }
+
 body {
   font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   color: var(--text);
@@ -596,6 +604,23 @@ body {
   .download-panel { grid-template-columns: 1fr; }
 }
 
+/* Header never overflows: the logo/nav/lang toggle/sign-in button used to
+   sit in one unbreakable flex row with no shrink rules, so on narrow phones
+   the row was wider than the screen and forced the whole page to scroll
+   horizontally (cutting off content on the left, as reported). */
+@media (max-width: 640px) {
+  .logo-text { font-size: 1.05rem; }
+  .header-right { gap: 8px; }
+  .lang-toggle span { display: none; }
+  .lang-toggle { padding: 7px 9px; }
+  .btn-google-signin span { display: none; }
+  .btn-google-signin { padding: 8px 10px; }
+  .user-name { display: none; }
+}
+@media (max-width: 380px) {
+  .logo-text { display: none; }
+}
+
 /* ===== AUTH / USER MENU ===== */
 .nav-link-admin { color: var(--error); }
 .nav-link-admin.active, .nav-link-admin:hover { color: var(--error); background: rgba(192,57,43,0.08); }
@@ -734,6 +759,22 @@ body {
   box-shadow: var(--shadow-sm);
 }
 .admin-toggle.on::after { transform: translateX(20px); }
+
+/* ===== AUTH CALLBACK ERROR BANNER ===== */
+.auth-error-banner {
+  background: #fdecea; border-bottom: 1px solid rgba(192,57,43,0.25);
+}
+.auth-error-banner-inner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 24px; font-size: 0.85rem; color: var(--error);
+}
+.auth-error-banner-inner i:first-child { flex-shrink: 0; }
+.auth-error-banner-inner span { flex: 1; }
+.auth-error-banner-inner button {
+  background: none; border: none; color: var(--error); cursor: pointer;
+  padding: 4px; opacity: 0.7; flex-shrink: 0;
+}
+.auth-error-banner-inner button:hover { opacity: 1; }
 
 /* ===== AUTH GATE OVERLAY ===== */
 .auth-gate-overlay {
