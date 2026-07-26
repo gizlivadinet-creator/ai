@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { slugify } from '@/lib/utils';
+import { slugify, getOwnerToken } from '@/lib/utils';
 import { generateProject } from '@/lib/generator';
 import type { GenerationResult, Project } from '@/lib/types';
 
@@ -63,6 +63,7 @@ export function useGenerate() {
           tags: generated.tags,
           performance_analysis: generated.performance_analysis,
           seo_analysis: generated.seo_analysis,
+          owner_token: getOwnerToken(),
         })
         .select()
         .single();

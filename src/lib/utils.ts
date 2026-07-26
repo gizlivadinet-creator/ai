@@ -2,6 +2,33 @@ export function cn(...classes: (string | false | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
 }
 
+const OWNER_TOKEN_KEY = 'immaculate-owner-token';
+
+/**
+ * Returns a stable per-browser identifier used to prove ownership of
+ * anonymously-created rows (see the `owner_token` column + RLS policies on
+ * `projects`). Generated once and persisted in localStorage; sent on every
+ * Supabase request via the `x-owner-token` header (see lib/supabase.ts) and
+ * stamped onto rows this browser inserts (see lib/hooks.ts).
+ */
+export function getOwnerToken(): string {
+  try {
+    let token = localStorage.getItem(OWNER_TOKEN_KEY);
+    if (!token) {
+      token =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `ot_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(OWNER_TOKEN_KEY, token);
+    }
+    return token;
+  } catch {
+    // localStorage unavailable (private mode, etc.) — fall back to a
+    // session-only token so writes still work, just without persistence.
+    return `ot_session_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 export function slugify(text: string): string {
   const map: Record<string, string> = {
     ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u',
