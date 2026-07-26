@@ -28,7 +28,7 @@ export function createJsonBlob(project: Project): Blob {
     install_guide: project.install_guide,
     tags: project.tags,
     generated_at: project.created_at,
-    generator: 'Claudia AI',
+    generator: 'Immaculate AI',
   };
   return new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
 }

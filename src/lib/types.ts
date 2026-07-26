@@ -16,6 +16,9 @@ export interface Project {
   files: GeneratedFile[];
   install_guide: string;
   tags: string[];
+  performance_analysis: string;
+  seo_analysis: string;
+  owner_token: string | null;
   created_at: string;
   updated_at: string;
 }

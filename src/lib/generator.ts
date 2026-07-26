@@ -391,7 +391,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Claudia AI Bot\\n"
+        "Immaculate AI Bot\\n"
         "Python + python-telegram-bot\\n"
         "Versiyon: 1.0.0"
     )
@@ -467,7 +467,7 @@ ${description}
         content: `#!/usr/bin/env python3
 """
 ${prompt}
-Claudia AI tarafından üretilen Python CLI uygulaması.
+Immaculate AI tarafından üretilen Python CLI uygulaması.
 """
 
 import argparse
@@ -674,7 +674,7 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(
     title="${prompt.slice(0, 50)}",
-    description="Claudia AI tarafından üretilen REST API",
+    description="Immaculate AI tarafından üretilen REST API",
     version="1.0.0",
 )
 
@@ -801,7 +801,7 @@ function generateJavaScriptProject(
         content: `#!/usr/bin/env node
 /**
  * ${prompt}
- * Claudia AI tarafından üretilen Node.js CLI aracı.
+ * Immaculate AI tarafından üretilen Node.js CLI aracı.
  */
 
 const fs = require('fs');
@@ -837,7 +837,7 @@ function parseArgs(argv) {
 }
 
 function showHelp() {
-  log('' + 'Claudia AI CLI Tool', 'bold');
+  log('' + 'Immaculate AI CLI Tool', 'bold');
   log('');
   log('Usage: cli-tool [options] <command>', 'blue');
   log('');
@@ -948,7 +948,7 @@ cli-tool run
         language: 'javascript',
         content: `/**
  * Express REST API - ${prompt}
- * Claudia AI tarafından üretilen Node.js API sunucusu.
+ * Immaculate AI tarafından üretilen Node.js API sunucusu.
  */
 
 const express = require('express');
@@ -1095,7 +1095,7 @@ function generatePhpProject(
       content: `<?php
 /**
  * ${prompt}
- * Claudia AI tarafından üretilen PHP REST API.
+ * Immaculate AI tarafından üretilen PHP REST API.
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -1255,7 +1255,7 @@ function generateWebProject(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="${prompt}">
   <meta property="og:title" content="${prompt}">
-  <meta property="og:description" content="Claudia AI tarafından üretilen web sayfası">
+  <meta property="og:description" content="Immaculate AI tarafından üretilen web sayfası">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <title>${prompt}</title>
@@ -1267,14 +1267,14 @@ function generateWebProject(
     "@context": "https://schema.org",
     "@type": "WebPage",
     "name": "${prompt}",
-    "description": "Claudia AI tarafından üretilen web sayfası"
+    "description": "Immaculate AI tarafından üretilen web sayfası"
   }
   </script>
 </head>
 <body>
   <header role="banner" class="header">
     <nav class="nav container" aria-label="Ana navigasyon">
-      <a href="#" class="logo"><i class="fa-solid fa-code"></i> Claudia</a>
+      <a href="#" class="logo"><i class="fa-solid fa-code"></i> Immaculate</a>
       <ul class="nav-links">
         <li><a href="#features">Özellikler</a></li>
         <li><a href="#about">Hakkında</a></li>
@@ -1321,7 +1321,7 @@ function generateWebProject(
     <section id="about" class="section section-alt">
       <div class="container">
         <h2 class="section-title">Hakkında</h2>
-        <p>Claudia AI tarafından üretilen, production-ready web sayfası.</p>
+        <p>Immaculate AI tarafından üretilen, production-ready web sayfası.</p>
       </div>
     </section>
 
@@ -1349,7 +1349,7 @@ function generateWebProject(
 
   <footer role="contentinfo" class="footer">
     <div class="container">
-      <p>&copy; 2024 Claudia AI. Tüm hakları saklıdır.</p>
+      <p>&copy; 2024 Immaculate AI. Tüm hakları saklıdır.</p>
     </div>
   </footer>
 

@@ -1,7 +1,7 @@
 import type { Dictionary, Language } from './types';
 
 const tr: Dictionary = {
-  app_name: 'Claudia AI',
+  app_name: 'Immaculate AI',
   app_tagline: 'Ultra Gelişmiş Kod Üretim Platformu',
   nav_new: 'Yeni Proje',
   nav_library: 'Kod Kütüphanesi',
@@ -58,8 +58,8 @@ const tr: Dictionary = {
   prompt_required: 'Lütfen bir komut girin',
   duplicate_found: 'Bu proje daha önce oluşturulmuş',
   open_project: 'Projeyi Aç',
-  research_sources: 'Araştırma Kaynakları',
-  sources_desc: 'Qwen Coder, DeepSeek Coder, Code Llama, StarCoder2, GitHub, GitLab, NPM, PyPI',
+  research_sources: 'Standartlar ve Kaynaklar',
+  sources_desc: 'Kalıplaşmış best practice şablonları; güvenlik, performans ve SEO standartları — GitHub, GitLab, NPM ve PyPI ekosistem konvansiyonlarına uygun üretim',
   optimized: 'Optimize Edildi',
   ready: 'Hazır',
   delete: 'Sil',
@@ -72,7 +72,7 @@ const tr: Dictionary = {
 };
 
 const en: Dictionary = {
-  app_name: 'Claudia AI',
+  app_name: 'Immaculate AI',
   app_tagline: 'Ultra-Advanced Code Generation Platform',
   nav_new: 'New Project',
   nav_library: 'Code Library',
@@ -129,8 +129,8 @@ const en: Dictionary = {
   prompt_required: 'Please enter a command',
   duplicate_found: 'This project was already generated',
   open_project: 'Open Project',
-  research_sources: 'Research Sources',
-  sources_desc: 'Qwen Coder, DeepSeek Coder, Code Llama, StarCoder2, GitHub, GitLab, NPM, PyPI',
+  research_sources: 'Standards & Sources',
+  sources_desc: 'Battle-tested best-practice templates; security, performance and SEO standards aligned with GitHub, GitLab, NPM and PyPI ecosystem conventions',
   optimized: 'Optimized',
   ready: 'Ready',
   delete: 'Delete',

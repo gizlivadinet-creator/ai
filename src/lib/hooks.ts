@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, getOwnerToken } from '@/lib/supabase';
 import { slugify } from '@/lib/utils';
 import { generateProject } from '@/lib/generator';
 import type { GenerationResult, Project } from '@/lib/types';
@@ -7,18 +7,40 @@ import type { GenerationResult, Project } from '@/lib/types';
 export function useGenerate() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState(false);
   const [result, setResult] = useState<Project | null>(null);
 
   async function generate(prompt: string): Promise<Project | null> {
-    if (!prompt.trim()) {
+    const trimmed = prompt.trim();
+    if (!trimmed) {
       setError('prompt_required');
       return null;
     }
     setLoading(true);
     setError(null);
+    setDuplicate(false);
     try {
-      const slug = slugify(prompt) + '-' + Date.now().toString(36).slice(-6);
-      const generated: GenerationResult = generateProject(prompt);
+      // The knowledge pool is meant to deduplicate identical requests
+      // (see AboutView / i18n "duplicate_found") — previously nothing
+      // actually checked for this and every submission created a new row.
+      const { data: existing, error: lookupError } = await supabase
+        .from('projects')
+        .select('*')
+        .ilike('prompt', trimmed)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (lookupError) throw lookupError;
+
+      if (existing) {
+        setDuplicate(true);
+        setResult(existing as Project);
+        return existing as Project;
+      }
+
+      const slug = slugify(trimmed) + '-' + Date.now().toString(36).slice(-6);
+      const generated: GenerationResult = generateProject(trimmed);
 
       const { data, error: insertError } = await supabase
         .from('projects')
@@ -26,13 +48,16 @@ export function useGenerate() {
           slug,
           title: generated.title,
           description: generated.description,
-          prompt,
+          prompt: trimmed,
           category: generated.category,
           primary_language: generated.primary_language,
           file_structure: generated.file_structure,
           files: generated.files,
           install_guide: generated.install_guide,
           tags: generated.tags,
+          performance_analysis: generated.performance_analysis,
+          seo_analysis: generated.seo_analysis,
+          owner_token: getOwnerToken(),
         })
         .select()
         .single();
@@ -42,15 +67,18 @@ export function useGenerate() {
       setResult(data as Project);
       return data as Project;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'error_generate';
-      setError(msg);
+      // Never surface raw driver/network error text to the UI (it can be
+      // technical, in the wrong language, or leak backend details) —
+      // always fall back to a known, translated error key.
+      console.error('generate() failed:', e);
+      setError('error_generate');
       return null;
     } finally {
       setLoading(false);
     }
   }
 
-  return { loading, error, result, generate, setResult };
+  return { loading, error, duplicate, result, generate, setResult };
 }
 
 export function useProjects() {
@@ -160,7 +188,8 @@ export async function deleteProject(id: string): Promise<boolean> {
     const { error } = await supabase.from('projects').delete().eq('id', id);
     if (error) throw error;
     return true;
-  } catch {
+  } catch (e) {
+    console.error('deleteProject() failed:', e);
     return false;
   }
 }
