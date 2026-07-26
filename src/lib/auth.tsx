@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase, signInWithGoogle, signOut, consumeAuthCallbackError } from '@/lib/supabase';
+import { supabase, signInWithGoogle, signOut } from '@/lib/supabase';
 import type { Profile } from '@/lib/types';
 
 interface AuthContextValue {
@@ -16,8 +16,6 @@ interface AuthContextValue {
   loading: boolean;
   isAdmin: boolean;
   isBanned: boolean;
-  authError: string | null;
-  clearAuthError: () => void;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -29,7 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(() => consumeAuthCallbackError());
 
   async function loadProfile(userId: string) {
     const { data } = await supabase
@@ -90,12 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAdmin: profile?.role === 'admin' && !profile?.is_banned,
     isBanned: !!profile?.is_banned,
-    authError,
-    clearAuthError: () => setAuthError(null),
-    signIn: async () => {
-      setAuthError(null);
-      await signInWithGoogle();
-    },
+    signIn: signInWithGoogle,
     signOut,
     refreshProfile: async () => {
       if (session?.user) await loadProfile(session.user.id);

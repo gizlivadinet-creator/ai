@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { slugify, getOwnerToken } from '@/lib/utils';
-import { generateProject } from '@/lib/generator';
-import type { GenerationResult, Project } from '@/lib/types';
+import { slugify } from '@/lib/utils';
+import { generateProjectRemote, GenerationError } from '@/lib/aiClient';
+import type { Project } from '@/lib/types';
 
 export function useGenerate() {
   const [loading, setLoading] = useState(false);
@@ -46,7 +46,7 @@ export function useGenerate() {
       }
 
       const slug = slugify(trimmed) + '-' + Date.now().toString(36).slice(-6);
-      const generated: GenerationResult = generateProject(trimmed);
+      const generated = await generateProjectRemote(trimmed);
 
       const { data, error: insertError } = await supabase
         .from('projects')
@@ -63,7 +63,6 @@ export function useGenerate() {
           tags: generated.tags,
           performance_analysis: generated.performance_analysis,
           seo_analysis: generated.seo_analysis,
-          owner_token: getOwnerToken(),
         })
         .select()
         .single();
@@ -77,7 +76,11 @@ export function useGenerate() {
       // technical, in the wrong language, or leak backend details) —
       // always fall back to a known, translated error key.
       console.error('generate() failed:', e);
-      setError('error_generate');
+      if (e instanceof GenerationError) {
+        setError(e.code);
+      } else {
+        setError('error_generate');
+      }
       return null;
     } finally {
       setLoading(false);
