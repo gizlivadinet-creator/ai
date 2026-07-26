@@ -8,7 +8,7 @@ export type Route =
   | { name: 'admin' };
 
 function parse(): Route {
-  const hash = window.location.hash.replace(/^#\/?/, '');
+  const hash = window.location.hash.replace(/^\/?/, '');
   const parts = hash.split('/').filter(Boolean);
   if (parts.length === 0) return { name: 'home' };
   if (parts[0] === 'library') return { name: 'library' };
