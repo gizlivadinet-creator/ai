@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { t } from '@/lib/i18n';
 import type { Language, Project } from '@/lib/types';
 import { navigate } from '@/lib/router';
@@ -6,26 +6,67 @@ import { useProjects } from '@/lib/hooks';
 import { CategoryBadge, CategoryFilter } from './CategoryBadge';
 import { formatDate, timeAgo } from '@/lib/utils';
 import { deleteProject } from '@/lib/hooks';
+import { hybridSearch, type LocalSearchResult } from '@/lib/search/localSearch';
+import { ExternalSourcesPanel } from './ExternalSourcesPanel';
 
 interface LibraryViewProps {
   lang: Language;
   initialSearch?: string;
 }
 
+// Debounce helper so we don't re-run the (semantic) search on every keystroke.
+function useDebounced<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 export function LibraryView({ lang, initialSearch = '' }: LibraryViewProps) {
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState(initialSearch);
-  const { projects, loading, error, fetchProjects } = useProjects();
+  const debouncedSearch = useDebounced(search, 300);
+  const { projects: allProjects, loading, error, fetchProjects } = useProjects();
+
+  const [rankedResults, setRankedResults] = useState<LocalSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   function handleCategoryChange(c: string) {
     setCategory(c);
-    fetchProjects(c, search);
+    fetchProjects(c); // category filtering still happens server-side; search is local now
   }
 
   function handleSearchChange(q: string) {
     setSearch(q);
-    fetchProjects(category, q);
   }
+
+  // Hybrid (fuzzy + semantic) search runs entirely client-side over the
+  // already-fetched category slice — free, no extra API calls, works
+  // offline once the embedding model is cached.
+  useEffect(() => {
+    let cancelled = false;
+    if (!debouncedSearch.trim()) {
+      setRankedResults(null);
+      return;
+    }
+    setSearching(true);
+    hybridSearch(allProjects, debouncedSearch).then((results) => {
+      if (!cancelled) {
+        setRankedResults(results);
+        setSearching(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, allProjects]);
+
+  const projects = useMemo(() => {
+    if (!rankedResults) return allProjects;
+    return rankedResults.map((r) => r.project);
+  }, [rankedResults, allProjects]);
 
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -51,7 +92,7 @@ export function LibraryView({ lang, initialSearch = '' }: LibraryViewProps) {
         <CategoryFilter active={category} onChange={handleCategoryChange} lang={lang} />
 
         <div className="library-search">
-          <i className="fa-solid fa-magnifying-glass"></i>
+          <i className={`fa-solid ${searching ? 'fa-circle-notch fa-spin' : 'fa-magnifying-glass'}`}></i>
           <input
             type="search"
             value={search}
@@ -60,6 +101,8 @@ export function LibraryView({ lang, initialSearch = '' }: LibraryViewProps) {
             aria-label={t('search_placeholder', lang)}
           />
         </div>
+
+        <ExternalSourcesPanel query={debouncedSearch} />
 
         {loading && (
           <div className="library-loading">

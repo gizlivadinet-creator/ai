@@ -1,10 +1,12 @@
-import { Suspense, lazy, useState } from 'react';
+import { Suspense, lazy, useMemo, useState } from 'react';
 import { t } from '@/lib/i18n';
 import type { Language, Project } from '@/lib/types';
 import { navigate } from '@/lib/router';
 import { CategoryBadge } from './CategoryBadge';
 import { formatDate, formatTime, copyToClipboard } from '@/lib/utils';
-import { downloadProjectZip, downloadProjectJson, createShareUrl } from '@/lib/download';
+import { downloadProjectZip, downloadProjectJson, downloadFilesZip, createShareUrl } from '@/lib/download';
+import { generateTestSuite } from '@/lib/testgen/generateTests';
+import { CodeBlock } from './CodeBlock';
 
 const CodeEditorView = lazy(() => import('./CodeEditorView').then((m) => ({ default: m.CodeEditorView })));
 const CommentSection = lazy(() => import('./CommentSection').then((m) => ({ default: m.CommentSection })));
@@ -20,12 +22,30 @@ interface ProjectResultProps {
   lang: Language;
 }
 
-type Tab = 'summary' | 'structure' | 'files' | 'install' | 'download' | 'analysis' | 'comments';
+type Tab = 'summary' | 'structure' | 'files' | 'install' | 'download' | 'analysis' | 'tests' | 'comments';
 
 export function ProjectResult({ project, lang }: ProjectResultProps) {
   const [tab, setTab] = useState<Tab>('summary');
   const [shareCopied, setShareCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [testsGenerated, setTestsGenerated] = useState(false);
+  const [selectedTestPath, setSelectedTestPath] = useState<string | null>(null);
+  const [downloadingTests, setDownloadingTests] = useState(false);
+
+  const testSuite = useMemo(
+    () => (testsGenerated ? generateTestSuite(project.files) : null),
+    [testsGenerated, project.files],
+  );
+
+  async function handleDownloadTests() {
+    if (!testSuite || testSuite.files.length === 0) return;
+    setDownloadingTests(true);
+    try {
+      await downloadFilesZip(testSuite.files, `${project.slug}-tests.zip`);
+    } finally {
+      setDownloadingTests(false);
+    }
+  }
 
   async function handleShare() {
     const url = createShareUrl(project);
@@ -54,6 +74,7 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
     { id: 'install', label: t('install_guide', lang), icon: 'fa-list-check' },
     { id: 'download', label: t('download_package', lang), icon: 'fa-download' },
     { id: 'analysis', label: t('performance_seo', lang), icon: 'fa-chart-line' },
+    { id: 'tests', label: lang === 'tr' ? 'Testler' : 'Tests', icon: 'fa-vial' },
     { id: 'comments', label: t('comments', lang), icon: 'fa-comments' },
   ];
 
@@ -241,6 +262,81 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
                   ? 'OWASP Top 10 koruması: SQL injection önlenmiş, XSS koruması, input validation, CORS yapılandırılmış.'
                   : 'OWASP Top 10 protection: SQL injection prevented, XSS protection, input validation, CORS configured.'}</p>
               </div>
+            </div>
+          )}
+
+          {tab === 'tests' && (
+            <div className="tests-panel">
+              {!testsGenerated && (
+                <div className="tests-empty">
+                  <i className="fa-solid fa-vial fa-3x"></i>
+                  <h3>{lang === 'tr' ? 'Test Üretici' : 'Test Generator'}</h3>
+                  <p>
+                    {lang === 'tr'
+                      ? 'Proje dosyalarını statik analizle tarayıp fonksiyon/route/bileşenler için otomatik test iskeleti üretir. Tamamen yerel ve ücretsizdir — hiçbir AI/API çağrısı yapılmaz.'
+                      : 'Scans the project files with static analysis and generates a test skeleton for functions/routes/components. Fully local and free — no AI/API calls involved.'}
+                  </p>
+                  <button className="btn-generate" onClick={() => setTestsGenerated(true)}>
+                    <i className="fa-solid fa-flask-vial"></i>
+                    {lang === 'tr' ? 'Testleri Üret' : 'Generate Tests'}
+                  </button>
+                </div>
+              )}
+
+              {testsGenerated && testSuite && testSuite.files.length === 0 && (
+                <div className="tests-empty">
+                  <i className="fa-solid fa-circle-info fa-3x"></i>
+                  <p>
+                    {lang === 'tr'
+                      ? 'Bu proje için otomatik test üretilecek tanınan bir fonksiyon/route bulunamadı (desteklenen diller: Python, JS/TS, PHP).'
+                      : 'No recognizable function/route was found to generate tests for (supported languages: Python, JS/TS, PHP).'}
+                  </p>
+                </div>
+              )}
+
+              {testsGenerated && testSuite && testSuite.files.length > 0 && (
+                <>
+                  <div className="tests-summary">
+                    <div className="tests-summary-stat">
+                      <strong>{testSuite.files.length}</strong>
+                      <span>{lang === 'tr' ? 'test dosyası' : 'test files'}</span>
+                    </div>
+                    <div className="tests-summary-stat">
+                      <strong>{testSuite.analyzed}</strong>
+                      <span>{lang === 'tr' ? 'kaynak dosya tarandı' : 'source files scanned'}</span>
+                    </div>
+                    <div className="tests-summary-stat">
+                      <strong>{testSuite.symbolCount}</strong>
+                      <span>{lang === 'tr' ? 'fonksiyon/route bulundu' : 'functions/routes found'}</span>
+                    </div>
+                    <button className="action-btn primary" onClick={handleDownloadTests} disabled={downloadingTests}>
+                      <i className={`fa-solid ${downloadingTests ? 'fa-circle-notch fa-spin' : 'fa-download'}`}></i>
+                      {lang === 'tr' ? 'Testleri İndir (.zip)' : 'Download Tests (.zip)'}
+                    </button>
+                  </div>
+
+                  <div className="tests-layout">
+                    <ul className="tests-file-list">
+                      {testSuite.files.map((f) => (
+                        <li
+                          key={f.path}
+                          className={selectedTestPath === f.path || (!selectedTestPath && f === testSuite.files[0]) ? 'active' : ''}
+                          onClick={() => setSelectedTestPath(f.path)}
+                        >
+                          <i className="fa-solid fa-flask"></i> {f.path}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="tests-file-view">
+                      {(() => {
+                        const active =
+                          testSuite.files.find((f) => f.path === selectedTestPath) ?? testSuite.files[0];
+                        return <CodeBlock path={active.path} content={active.content} language={active.language} lang={lang} />;
+                      })()}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
