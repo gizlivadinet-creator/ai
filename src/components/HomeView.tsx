@@ -3,6 +3,7 @@ import { t } from '@/lib/i18n';
 import type { Language } from '@/lib/types';
 import { useGenerate, useStats } from '@/lib/hooks';
 import { navigate } from '@/lib/router';
+import { useAuth } from '@/lib/auth';
 import { ProjectResult } from './ProjectResult';
 
 interface HomeViewProps {
@@ -56,8 +57,10 @@ export function HomeView({ lang }: HomeViewProps) {
   const [prompt, setPrompt] = useState('');
   const { loading, error, duplicate, result, generate } = useGenerate();
   const { stats } = useStats();
+  const { user, isBanned, signIn, loading: authLoading } = useAuth();
 
   async function handleGenerate() {
+    if (!user) return;
     const project = await generate(prompt);
     if (project) {
       setPrompt('');
@@ -90,7 +93,7 @@ export function HomeView({ lang }: HomeViewProps) {
           <h1 className="hero-title">{t('welcome_title', lang)}</h1>
           <p className="hero-desc">{t('welcome_desc', lang)}</p>
 
-          <div className="prompt-box">
+          <div className="prompt-box" style={{ position: 'relative' }}>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -98,6 +101,7 @@ export function HomeView({ lang }: HomeViewProps) {
               placeholder={t('prompt_placeholder', lang)}
               rows={3}
               aria-label={t('prompt_placeholder', lang)}
+              disabled={!user || isBanned}
             />
             <div className="prompt-footer">
               <span className="prompt-hint">
@@ -107,7 +111,7 @@ export function HomeView({ lang }: HomeViewProps) {
               <button
                 className="btn-generate"
                 onClick={handleGenerate}
-                disabled={loading || !prompt.trim()}
+                disabled={loading || !prompt.trim() || !user || isBanned}
               >
                 {loading ? (
                   <>
@@ -122,6 +126,22 @@ export function HomeView({ lang }: HomeViewProps) {
                 )}
               </button>
             </div>
+
+            {!authLoading && !user && (
+              <div className="auth-gate-overlay">
+                <i className="fa-brands fa-google"></i>
+                <p>{t('login_required_generate', lang)}</p>
+                <button className="btn-generate" onClick={() => signIn()}>
+                  {t('sign_in_google', lang)}
+                </button>
+              </div>
+            )}
+            {isBanned && (
+              <div className="auth-gate-overlay auth-gate-overlay-banned">
+                <i className="fa-solid fa-ban"></i>
+                <p>{t('banned_notice', lang)}</p>
+              </div>
+            )}
           </div>
 
           {error && (
