@@ -12,7 +12,7 @@ interface HeaderProps {
 }
 
 export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
-  const { user, profile, loading, isAdmin, isBanned, signIn, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, isBanned, signIn, signOut, authError, clearAuthError } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -28,6 +28,17 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
 
   return (
     <header className="header" role="banner">
+      {authError && (
+        <div className="auth-error-banner">
+          <div className="container auth-error-banner-inner">
+            <i className="fa-solid fa-triangle-exclamation"></i>
+            <span>{lang === 'tr' ? 'Google ile giriş başarısız oldu: ' : 'Google sign-in failed: '}{authError}</span>
+            <button onClick={clearAuthError} aria-label="Close">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+      )}
       <div className="header-inner">
         <a href="#/" className="logo" onClick={() => navigate('/')}>
           <i className="fa-solid fa-code logo-icon"></i>
