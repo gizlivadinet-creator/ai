@@ -16,6 +16,11 @@ export async function downloadProjectZip(project: Project): Promise<void> {
   downloadBlob(blob, filename);
 }
 
+export async function downloadFilesZip(files: GeneratedFile[], filename: string): Promise<void> {
+  const blob = await createZipBlob(files);
+  downloadBlob(blob, filename);
+}
+
 export function createJsonBlob(project: Project): Blob {
   const exportData = {
     title: project.title,
