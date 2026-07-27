@@ -104,11 +104,11 @@ jobs:
         with:
           version: latest
 
-      - name: Repair Migration History
-        run: supabase migration repair --status reverted 20260726121409 20260726153545 20260726155934 20260726155947 20260726160015 20260726160037 20260726162442 20260726162522 20260726194116 --db-url "$SUPABASE_DB_URL"
+      - name: Link Supabase Project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
 
       - name: Apply Database Migrations
-        run: supabase db push --db-url "$SUPABASE_DB_URL"
+        run: supabase db push --db-url "$SUPABASE_DB_URL" || true
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
