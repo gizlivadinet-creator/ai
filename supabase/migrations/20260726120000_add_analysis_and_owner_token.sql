@@ -29,6 +29,7 @@ ALTER TABLE projects
 CREATE INDEX IF NOT EXISTS projects_owner_token_idx ON projects (owner_token);
 
 DROP POLICY IF EXISTS "public_update_projects" ON projects;
+DROP POLICY IF EXISTS "owner_update_projects" ON projects;
 CREATE POLICY "owner_update_projects" ON projects FOR UPDATE
   TO anon, authenticated
   USING (
@@ -41,6 +42,7 @@ CREATE POLICY "owner_update_projects" ON projects FOR UPDATE
   );
 
 DROP POLICY IF EXISTS "public_delete_projects" ON projects;
+DROP POLICY IF EXISTS "owner_delete_projects" ON projects;
 CREATE POLICY "owner_delete_projects" ON projects FOR DELETE
   TO anon, authenticated
   USING (
