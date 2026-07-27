@@ -153,6 +153,13 @@ DROP POLICY IF EXISTS "comments_select_all" ON comments;
 CREATE POLICY "comments_select_all" ON comments FOR SELECT
   TO anon, authenticated USING (true);
 
+CREATE OR REPLACE FUNCTION is_banned_user(check_user uuid)
+RETURNS boolean
+LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE
+AS $$
+  SELECT COALESCE((SELECT is_banned FROM profiles WHERE id = check_user), false);
+$$;
+
 DROP POLICY IF EXISTS "comments_insert_own" ON comments;
 CREATE POLICY "comments_insert_own" ON comments FOR INSERT
   TO authenticated
@@ -165,13 +172,6 @@ CREATE POLICY "comments_update_own" ON comments FOR UPDATE
 DROP POLICY IF EXISTS "comments_delete_own_or_admin" ON comments;
 CREATE POLICY "comments_delete_own_or_admin" ON comments FOR DELETE
   TO authenticated USING (auth.uid() = user_id OR is_admin(auth.uid()));
-
-CREATE OR REPLACE FUNCTION is_banned_user(check_user uuid)
-RETURNS boolean
-LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE
-AS $$
-  SELECT COALESCE((SELECT is_banned FROM profiles WHERE id = check_user), false);
-$$;
 
 -- ============================================================================
 -- 3. site_settings
