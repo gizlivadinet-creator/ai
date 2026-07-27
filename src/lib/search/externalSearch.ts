@@ -9,7 +9,14 @@ export interface ExternalSourceResult {
 
 export const EXTERNAL_SOURCES = [
   { id: 'wikipedia', label: 'Wikipedia' },
+  { id: 'duckduckgo', label: 'DuckDuckGo' },
+  { id: 'google', label: 'Google' },
   { id: 'github', label: 'GitHub' },
+  { id: 'gitlab', label: 'GitLab' },
+  { id: 'bitbucket', label: 'Bitbucket' },
+  { id: 'gist', label: 'GitHub Gist' },
+  { id: 'codepen', label: 'CodePen' },
+  { id: 'archive', label: 'Internet Archive' },
   { id: 'mdn', label: 'MDN' },
   { id: 'stackoverflow', label: 'StackOverflow' },
   { id: 'npm', label: 'npm' },
