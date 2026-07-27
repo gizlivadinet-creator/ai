@@ -64,6 +64,11 @@ export function HomeView({ lang }: HomeViewProps) {
     const project = await generate(prompt);
     if (project) {
       setPrompt('');
+      // Without this, the generated project only lived in this component's
+      // in-memory state — the URL never changed, so refreshing the page
+      // (or sharing the link) lost it even though it was already saved in
+      // Supabase. Pushing the hash route makes it reload from the DB.
+      navigate(`/p/${project.slug}`);
     }
   }
 
