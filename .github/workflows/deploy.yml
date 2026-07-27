@@ -104,6 +104,11 @@ jobs:
         with:
           version: latest
 
+      - name: Debug DB URL (password masked)
+        run: |
+          echo "Length of SUPABASE_DB_URL: ${#SUPABASE_DB_URL}"
+          echo "$SUPABASE_DB_URL" | sed -E 's#(postgresql://[^:]+):[^@]*@#\1:****@#'
+
       - name: Apply Database Migrations
         # Uses the IPv4-compatible Session Pooler connection string
         # (SUPABASE_DB_URL secret) instead of `supabase link`, because the
