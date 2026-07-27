@@ -114,7 +114,9 @@ jobs:
         # (SUPABASE_DB_URL secret) instead of `supabase link`, because the
         # direct db.<ref>.supabase.co host is IPv6-only and GitHub Actions
         # runners have no IPv6 route to it ("failed to connect to postgres").
-        run: supabase db push --db-url "$SUPABASE_DB_URL"
+        # --debug surfaces the real low-level connection error (TLS/auth/etc)
+        # instead of the generic "PgClient: Failed to connect" message.
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --debug
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
