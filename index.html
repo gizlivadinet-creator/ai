@@ -143,6 +143,47 @@
 
     <div id="root"></div>
 
+    <script>
+      // Boot-error catcher: if anything throws before/while React mounts,
+      // show the real error on screen instead of leaving a silent white
+      // page. This does nothing once the app has mounted successfully.
+      (function () {
+        var shown = false;
+        function showBootError(message) {
+          if (shown) return;
+          var root = document.getElementById('root');
+          if (!root || root.childElementCount > 0) return; // app already mounted
+          shown = true;
+          root.innerHTML =
+            '<div style="font-family:monospace;background:#1a1a2e;color:#ff6b6b;' +
+            'padding:24px;min-height:100vh;box-sizing:border-box;white-space:pre-wrap;' +
+            'word-break:break-word;font-size:14px;line-height:1.6;">' +
+            '<strong style="color:#fff;font-size:16px;">Sayfa yüklenirken bir hata oluştu:</strong>\n\n' +
+            String(message) +
+            '</div>';
+        }
+        window.addEventListener('error', function (e) {
+          showBootError((e && e.message) || e);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          showBootError((e && e.reason && (e.reason.message || e.reason)) || e);
+        });
+        // Fallback: if nothing has mounted into #root after 6s with no
+        // error event fired either, say so explicitly (e.g. a script
+        // failed to load at all, so no JS error ever ran).
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount === 0) {
+            showBootError(
+              '6 saniye sonra hâlâ hiçbir şey yüklenmedi ve hata olayı da tetiklenmedi.\n' +
+              'Bu genelde bir dosyanın (script/asset) hiç yüklenememesi anlamına gelir ' +
+              '(404, yanlış yol, veya ağ engeli).'
+            );
+          }
+        }, 6000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
