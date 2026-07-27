@@ -93,6 +93,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
     steps:
       - name: Checkout Repository
@@ -104,30 +105,11 @@ jobs:
           version: latest
 
       - name: Apply Database Migrations
-        # Runs each migration file's SQL through the Supabase Management API
-        # (POST /v1/projects/{ref}/database/query) instead of connecting to
-        # Postgres directly. Direct connections (both the IPv6-only host and
-        # the IPv4 Session Pooler) reliably failed to connect from GitHub
-        # Actions runners with no further detail even under --debug. The
-        # Management API only needs plain HTTPS + the access token we
-        # already have, so it sidesteps that entirely.
-        run: |
-          set -e
-          for f in $(ls supabase/migrations/*.sql | sort); do
-            echo "Applying $f ..."
-            jq -Rs '{query: .}' "$f" > /tmp/payload.json
-            status=$(curl -sS -o /tmp/response.json -w "%{http_code}" \
-              -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
-              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-              -H "Content-Type: application/json" \
-              --data @/tmp/payload.json)
-            cat /tmp/response.json
-            echo ""
-            if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-              echo "Migration $f failed with HTTP $status"
-              exit 1
-            fi
-          done
+        # Uses the IPv4-compatible Session Pooler connection string
+        # (SUPABASE_DB_URL secret) instead of `supabase link`, because the
+        # direct db.<ref>.supabase.co host is IPv6-only and GitHub Actions
+        # runners have no IPv6 route to it ("failed to connect to postgres").
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
