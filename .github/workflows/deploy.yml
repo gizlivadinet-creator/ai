@@ -36,7 +36,7 @@ jobs:
           cache: npm
 
       - name: Install Dependencies
-        run: npm install
+            run: npm install
 
       - name: Verify Repository
         run: |
@@ -106,8 +106,8 @@ jobs:
           version: latest
 
       - name: Apply Database Migrations
-        # Şifreyi environment değişkeninden doğrudan komuta dahil eder
-        run: supabase db push --db-url "postgresql://postgres.dcjyoqhuzelsmtdqxosp:${SUPABASE_DB_PASSWORD}@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
+        # Şifreyi açıkça URL içine yazmak yerine CLI'ın kendi değişkeninden okumasını sağlıyoruz
+        run: npx supabase db push --db-url "postgresql://postgres.dcjyoqhuzelsmtdqxosp:${SUPABASE_DB_PASSWORD}@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
