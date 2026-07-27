@@ -104,7 +104,7 @@ jobs:
           version: latest
 
       - name: Apply Database Migrations
-        run: supabase db push --db-url "$SUPABASE_DB_URL" || true
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref dcjyoqhuzelsmtdqxosp
