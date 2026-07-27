@@ -5,7 +5,7 @@ interface ExternalSourcesPanelProps {
   query: string;
 }
 
-const DEFAULT_ACTIVE: ExternalSourceId[] = ['wikipedia', 'github', 'npm', 'pypi'];
+const DEFAULT_ACTIVE: ExternalSourceId[] = ['wikipedia', 'duckduckgo', 'google', 'github', 'gitlab', 'bitbucket', 'gist', 'codepen', 'archive', 'npm', 'pypi'];
 
 export function ExternalSourcesPanel({ query }: ExternalSourcesPanelProps) {
   const [open, setOpen] = useState(false);
