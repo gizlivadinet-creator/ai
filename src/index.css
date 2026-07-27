@@ -34,7 +34,12 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
   font-family: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
@@ -43,11 +48,23 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.app { display: flex; flex-direction: column; min-height: 100vh; }
-.main { flex: 1; }
-.container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; width: 100%; }
+#root { width: 100%; overflow-x: hidden; }
+
+/* Anything that would otherwise stretch past the viewport (wide tables,
+   pre blocks, embeds) gets clipped/scrolled locally instead of pushing the
+   whole page sideways — this is what was causing the mobile layout to
+   shift/scroll to the right. */
+img, video, svg, canvas { max-width: 100%; height: auto; }
+
+.app { display: flex; flex-direction: column; min-height: 100vh; width: 100%; overflow-x: hidden; }
+.main { flex: 1; min-width: 0; }
+.container { max-width: var(--max-width); margin: 0 auto; padding: 0 24px; width: 100%; box-sizing: border-box; }
 
 /* ===== HEADER ===== */
 .header {
@@ -61,16 +78,18 @@ body {
   max-width: var(--max-width); margin: 0 auto;
   padding: 0 24px; height: 64px;
   display: flex; align-items: center; gap: 24px;
+  width: 100%; box-sizing: border-box;
 }
 .logo {
   display: flex; align-items: center; gap: 8px;
   font-size: 1.25rem; font-weight: 700;
   color: var(--text); text-decoration: none;
   letter-spacing: -0.02em;
+  flex-shrink: 0;
 }
 .logo-icon { color: var(--primary); font-size: 1.15rem; }
 .logo-accent { color: var(--primary); }
-.nav { display: flex; gap: 4px; margin-left: 16px; }
+.nav { display: flex; gap: 4px; margin-left: 16px; min-width: 0; flex-shrink: 1; }
 .nav-link {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: var(--radius-sm);
@@ -81,7 +100,7 @@ body {
 .nav-link:hover { color: var(--text); background: var(--bg-alt); }
 .nav-link.active { color: var(--primary); background: var(--primary-soft); }
 .nav-link i { font-size: 0.85rem; }
-.header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-shrink: 0; min-width: 0; }
 .header-search {
   display: flex; align-items: center; gap: 8px;
   background: var(--bg-alt); border: 1px solid transparent;
@@ -635,6 +654,11 @@ body {
   .nav-link { padding: 8px 10px; }
   .nav { margin-left: 8px; gap: 2px; }
   .header-search { display: none; }
+  .lang-toggle span { display: none; }
+  .lang-toggle { padding: 7px 9px; }
+  .btn-google-signin span { display: none; }
+  .btn-google-signin { padding: 8px; }
+  .user-name { max-width: 80px; }
   .hero { padding: 48px 0 32px; }
   .hero-title { font-size: 2rem; }
   .hero-desc { font-size: 1rem; }
@@ -649,10 +673,23 @@ body {
 }
 @media (max-width: 480px) {
   .container { padding: 0 16px; }
-  .header-inner { padding: 0 16px; gap: 8px; }
+  .header-inner { padding: 0 12px; gap: 6px; height: 58px; }
+  .logo-text { font-size: 1.05rem; }
+  .nav { gap: 0; margin-left: 4px; }
+  .nav-link { padding: 8px 8px; }
+  .header-right { gap: 6px; }
   .quick-prompts-grid { grid-template-columns: 1fr; }
   .projects-grid { grid-template-columns: 1fr; }
   .download-panel { grid-template-columns: 1fr; }
+  .hero-inner { padding: 0 16px; }
+  .hero-title { font-size: 1.7rem; }
+  .prompt-box { padding: 16px; }
+  .user-name { display: none; }
+}
+@media (max-width: 360px) {
+  .logo-text { font-size: 0.92rem; }
+  .nav-link { padding: 8px 6px; }
+  .nav-link i { font-size: 0.78rem; }
 }
 
 /* ===== AUTH / USER MENU ===== */
