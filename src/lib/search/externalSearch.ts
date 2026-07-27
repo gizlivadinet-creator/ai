@@ -11,6 +11,7 @@ export const EXTERNAL_SOURCES = [
   { id: 'wikipedia', label: 'Wikipedia' },
   { id: 'duckduckgo', label: 'DuckDuckGo' },
   { id: 'google', label: 'Google' },
+  { id: 'yandex', label: 'Yandex' },
   { id: 'github', label: 'GitHub' },
   { id: 'gitlab', label: 'GitLab' },
   { id: 'bitbucket', label: 'Bitbucket' },
