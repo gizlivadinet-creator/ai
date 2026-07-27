@@ -93,7 +93,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
     steps:
       - name: Checkout Repository
@@ -105,9 +105,11 @@ jobs:
           version: latest
 
       - name: Apply Database Migrations
-        run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push --password "$SUPABASE_DB_PASSWORD"
+        # Uses the IPv4-compatible Session Pooler connection string
+        # (SUPABASE_DB_URL secret) instead of `supabase link`, because the
+        # direct db.<ref>.supabase.co host is IPv6-only and GitHub Actions
+        # runners have no IPv6 route to it ("failed to connect to postgres").
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
