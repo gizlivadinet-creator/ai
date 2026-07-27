@@ -56,6 +56,7 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 -- SECURITY DEFINER: safe to call from any RLS policy without recursing
 -- back into profiles' own RLS (which would otherwise deadlock the check).
+DROP FUNCTION IF EXISTS is_admin(uuid) CASCADE;
 CREATE OR REPLACE FUNCTION is_admin(check_user uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -92,6 +93,8 @@ CREATE POLICY "profiles_update_self" ON profiles FOR UPDATE
 -- other provider). Without this, `profiles` stayed empty forever and every
 -- signed-in user looked "logged out" in the UI (no display_name/avatar,
 -- isAdmin always false).
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS handle_new_user() CASCADE;
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -153,6 +156,7 @@ DROP POLICY IF EXISTS "comments_select_all" ON comments;
 CREATE POLICY "comments_select_all" ON comments FOR SELECT
   TO anon, authenticated USING (true);
 
+DROP FUNCTION IF EXISTS is_banned_user(uuid) CASCADE;
 CREATE OR REPLACE FUNCTION is_banned_user(check_user uuid)
 RETURNS boolean
 LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE
@@ -231,6 +235,7 @@ CREATE POLICY "audit_log_select_admin" ON audit_log FOR SELECT
 -- 5. Admin RPCs (SECURITY DEFINER — enforce is_admin() themselves)
 -- ============================================================================
 
+DROP FUNCTION IF EXISTS admin_ban_user(uuid, text) CASCADE;
 CREATE OR REPLACE FUNCTION admin_ban_user(target_user uuid, reason text DEFAULT '')
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -247,6 +252,7 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS admin_unban_user(uuid) CASCADE;
 CREATE OR REPLACE FUNCTION admin_unban_user(target_user uuid)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -263,6 +269,7 @@ BEGIN
 END;
 $$;
 
+DROP FUNCTION IF EXISTS admin_set_role(uuid, text) CASCADE;
 CREATE OR REPLACE FUNCTION admin_set_role(target_user uuid, new_role text)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -287,6 +294,7 @@ $$;
 
 -- One-time bootstrap: the very first caller becomes admin; every call after
 -- that is a safe no-op. Returns true iff it just promoted the caller.
+DROP FUNCTION IF EXISTS admin_bootstrap_first_admin() CASCADE;
 CREATE OR REPLACE FUNCTION admin_bootstrap_first_admin()
 RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
