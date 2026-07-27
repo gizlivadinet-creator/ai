@@ -34,7 +34,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', userId)
       .maybeSingle();
-    setProfile((data as Profile) || null);
+    let current = (data as Profile) || null;
+
+    // Chicken-and-egg fix: the DB has an `admin_bootstrap_first_admin()`
+    // RPC that lets the very first authenticated user claim the admin
+    // role, but nothing in the UI ever called it, so there was no way to
+    // ever become an admin. If this user isn't already an admin, try the
+    // bootstrap (it's a safe no-op after the first admin exists) and
+    // reload the profile if it just promoted us.
+    if (current && current.role !== 'admin') {
+      try {
+        const { data: promoted } = await supabase.rpc('admin_bootstrap_first_admin');
+        if (promoted) {
+          const { data: refreshed } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          current = (refreshed as Profile) || current;
+        }
+      } catch {
+        // RPC missing/not migrated yet — ignore, keep whatever we loaded.
+      }
+    }
+
+    setProfile(current);
   }
 
   useEffect(() => {
