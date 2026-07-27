@@ -94,7 +94,6 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
     steps:
       - name: Checkout Repository
@@ -106,7 +105,7 @@ jobs:
           version: latest
 
       - name: Apply Database Migrations
-        run: supabase db push --db-url "postgresql://postgres.dcjyoqhuzelsmtdqxosp:${SUPABASE_DB_PASSWORD}@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Deploy all Edge Functions
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
