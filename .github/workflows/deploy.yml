@@ -103,6 +103,17 @@ jobs:
         with:
           version: latest
 
+      - name: Repair Migration History
+        # The remote project has a migration version (20260728083645) recorded
+        # in its history table that has no matching file in
+        # supabase/migrations/ (it was applied directly on the remote, e.g.
+        # via the SQL editor, and never committed). `db push` refuses to run
+        # until that's resolved. Marking it "reverted" just tells Supabase to
+        # forget that bookkeeping entry — it does NOT undo any real schema
+        # change already applied to the database. `|| true` makes this a
+        # no-op on every future run once it's fixed once.
+        run: supabase migration repair --status reverted 20260728083645 --db-url "$SUPABASE_DB_URL" || true
+
       - name: Apply Database Migrations
         run: supabase db push --db-url "$SUPABASE_DB_URL"
 
