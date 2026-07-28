@@ -53,6 +53,20 @@ const QUICK_PROMPTS: Record<string, { tr: string; en: string; icon: string }> = 
   },
 };
 
+// Font Awesome only renders an icon glyph if it's paired with the style
+// (brands vs solid/regular) it actually belongs to — vendor/product logos
+// like Node.js and PHP live under "fa-brands", everything else here is
+// "fa-solid". Hardcoding one style for every icon (as before) silently
+// breaks any icon from the other style instead of erroring. This set is
+// the small, known list of Font Awesome icon names that are brand glyphs,
+// so any current or future entry in QUICK_PROMPTS resolves to the right
+// style automatically.
+const FA_BRAND_ICONS = new Set(['fa-node-js', 'fa-php', 'fa-python', 'fa-js', 'fa-google']);
+
+function faStyleFor(icon: string): 'fa-brands' | 'fa-solid' {
+  return FA_BRAND_ICONS.has(icon) ? 'fa-brands' : 'fa-solid';
+}
+
 export function HomeView({ lang }: HomeViewProps) {
   const [prompt, setPrompt] = useState('');
   const { loading, error, duplicate, result, generate } = useGenerate();
@@ -194,7 +208,7 @@ export function HomeView({ lang }: HomeViewProps) {
                 className="quick-prompt-card"
                 onClick={() => handleQuickPrompt(lang === 'tr' ? qp.tr : qp.en)}
               >
-                <i className={`fa-solid ${qp.icon}`}></i>
+                <i className={`${faStyleFor(qp.icon)} ${qp.icon}`}></i>
                 <span>{lang === 'tr' ? qp.tr : qp.en}</span>
               </button>
             ))}
