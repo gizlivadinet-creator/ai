@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { generateProject } from '@/lib/generator';
 import type { GenerationResult } from '@/lib/types';
 
 export class GenerationError extends Error {
@@ -11,10 +10,26 @@ export class GenerationError extends Error {
 
 /**
  * Calls the `generate-code` Supabase Edge Function, which uses a real LLM
- * (Anthropic Claude) grounded in live npm/PyPI/Maven/GitHub package data to
- * produce a complete project. Falls back to the local rule-based generator
- * ONLY if the function is unreachable or not yet configured (missing
- * ANTHROPIC_API_KEY secret), so the site keeps working during setup.
+ * (Anthropic Claude) grounded in live package/repo/docs research to produce
+ * a complete project.
+ *
+ * IMPORTANT: this used to silently fall back to a local, keyword-matching
+ * fake generator (src/lib/generator.ts) whenever the edge function errored
+ * for ANY reason — not just "not configured yet", but also transient
+ * failures, rate limits, or bugs. That fallback is indistinguishable from a
+ * real AI result in the UI, and — because generate() unconditionally saves
+ * whatever comes back here into the shared `projects` table, keyed by the
+ * exact prompt text, with future identical prompts served straight from
+ * that cached row — a single silent failure would get PERMANENTLY served
+ * to everyone who submits that same prompt again, with no error, no retry,
+ * and no way to tell it wasn't really Claude. That's what was happening
+ * (any prompt the local matcher didn't recognize, e.g. a XenForo add-on
+ * request, silently produced a generic Python CLI template forever).
+ *
+ * So: any failure here must throw a real, visible error instead of
+ * quietly returning fake content. Check the generate-code function's logs
+ * in the Supabase Dashboard (Edge Functions > generate-code > Logs) to see
+ * the actual underlying error when this fires.
  */
 export async function generateProjectRemote(prompt: string): Promise<GenerationResult> {
   const { data, error } = await supabase.functions.invoke('generate-code', {
@@ -37,15 +52,15 @@ export async function generateProjectRemote(prompt: string): Promise<GenerationR
     if (code === 'banned') throw new GenerationError('banned_notice');
     if (code === 'unauthorized') throw new GenerationError('login_required_generate');
 
-    // Infra/config problem (e.g. ANTHROPIC_API_KEY not set yet) — degrade
-    // gracefully instead of blocking the whole platform.
-    console.warn('generate-code function unavailable, using local fallback generator:', code);
-    return generateProject(prompt);
+    // Anything else (server_misconfigured, internal_error, network failure,
+    // Anthropic API error, etc.) is a real failure — surface it honestly.
+    console.error('generate-code function failed:', code);
+    throw new GenerationError('error_generate');
   }
 
   if (!data?.result) {
-    console.warn('generate-code returned no result, using local fallback generator');
-    return generateProject(prompt);
+    console.error('generate-code returned no result');
+    throw new GenerationError('error_generate');
   }
 
   return data.result as GenerationResult;
