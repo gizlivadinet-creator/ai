@@ -87,10 +87,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // IMPORTANT: this callback must stay synchronous and must not itself
+    // await any supabase.auth.* or supabase.from()/rpc() call.
+    //
+    // On a plain page refresh (no OAuth redirect), supabase-js's client
+    // construction runs GoTrueClient.initialize() -> _initialize() ->
+    // _recoverAndRefresh(), all inside a single _acquireLock(-1, ...) call
+    // that is only released once _notifyAllSubscribers() has *awaited every
+    // registered onAuthStateChange listener*. If a listener here awaits
+    // loadProfile(), which calls supabase.from('profiles').select(...),
+    // that data call needs a fresh access token and internally calls
+    // supabase.auth.getSession() -> which itself first awaits
+    // `initializePromise` and then tries to _acquireLock() again. Since the
+    // lock is still held by the very initialize() call that is waiting on
+    // this listener, the two promises wait on each other forever: loading
+    // never resolves, the header never decides sign-in vs. signed-in, and
+    // every admin-only UI (nav link, Kod Kütüphanesi, code generation gate)
+    // stays stuck in its "loading" state permanently.
+    //
+    // Supabase's own SDK works around this exact hazard for the OAuth
+    // callback path by wrapping its own post-recovery notification in
+    // setTimeout(..., 0) (see auth-js GoTrueClient#_initialize, the
+    // `detectSessionInUrl` branch). We do the same here for the storage
+    // recovery path, which is the one that isn't already deferred.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession?.user) {
-        await loadProfile(newSession.user.id);
+        const userId = newSession.user.id;
+        setTimeout(() => {
+          if (mounted) loadProfile(userId);
+        }, 0);
       } else {
         setProfile(null);
       }
