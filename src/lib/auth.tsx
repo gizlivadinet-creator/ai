@@ -29,36 +29,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function loadProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-    let current = (data as Profile) || null;
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      let current = (data as Profile) || null;
 
-    // Chicken-and-egg fix: the DB has an `admin_bootstrap_first_admin()`
-    // RPC that lets the very first authenticated user claim the admin
-    // role, but nothing in the UI ever called it, so there was no way to
-    // ever become an admin. If this user isn't already an admin, try the
-    // bootstrap (it's a safe no-op after the first admin exists) and
-    // reload the profile if it just promoted us.
-    if (current && current.role !== 'admin') {
-      try {
-        const { data: promoted } = await supabase.rpc('admin_bootstrap_first_admin');
-        if (promoted) {
-          const { data: refreshed } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-          current = (refreshed as Profile) || current;
+      // Chicken-and-egg fix: the DB has an `admin_bootstrap_first_admin()`
+      // RPC that lets the very first authenticated user claim the admin
+      // role, but nothing in the UI ever called it, so there was no way to
+      // ever become an admin. If this user isn't already an admin, try the
+      // bootstrap (it's a safe no-op after the first admin exists) and
+      // reload the profile if it just promoted us.
+      if (current && current.role !== 'admin') {
+        try {
+          const { data: promoted } = await supabase.rpc('admin_bootstrap_first_admin');
+          if (promoted) {
+            const { data: refreshed } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .maybeSingle();
+            current = (refreshed as Profile) || current;
+          }
+        } catch {
+          // RPC missing/not migrated yet — ignore, keep whatever we loaded.
         }
-      } catch {
-        // RPC missing/not migrated yet — ignore, keep whatever we loaded.
       }
-    }
 
-    setProfile(current);
+      setProfile(current);
+    } catch (err) {
+      // If this ever throws uncaught, the caller's `setLoading(false)` never
+      // runs and the header permanently shows neither the sign-in button
+      // nor the user menu (both are gated on `!loading`). Never let that
+      // happen — log it and fall back to "no profile" instead.
+      console.error('loadProfile failed:', err);
+      setProfile(null);
+    }
   }
 
   useEffect(() => {
@@ -66,11 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return;
-      setSession(data.session);
-      if (data.session?.user) {
-        await loadProfile(data.session.user.id);
+      try {
+        setSession(data.session);
+        if (data.session?.user) {
+          await loadProfile(data.session.user.id);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
+    }).catch(() => {
+      if (mounted) setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
