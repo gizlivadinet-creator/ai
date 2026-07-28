@@ -1,6 +1,6 @@
 import { Suspense, lazy, useMemo, useState } from 'react';
 import { t } from '@/lib/i18n';
-import type { Language, Project } from '@/lib/types';
+import type { Language, Project, GeneratedFile } from '@/lib/types';
 import { navigate } from '@/lib/router';
 import { CategoryBadge } from './CategoryBadge';
 import { formatDate, formatTime, copyToClipboard } from '@/lib/utils';
@@ -31,6 +31,7 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
   const [testsGenerated, setTestsGenerated] = useState(false);
   const [selectedTestPath, setSelectedTestPath] = useState<string | null>(null);
   const [downloadingTests, setDownloadingTests] = useState(false);
+  const [viewFile, setViewFile] = useState<GeneratedFile | null>(null);
 
   const testSuite = useMemo(
     () => (testsGenerated ? generateTestSuite(project.files) : null),
@@ -174,6 +175,23 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
               <pre className="file-tree">
                 <code>{project.file_structure}</code>
               </pre>
+              {project.files.length > 0 && (
+                <ul className="structure-file-list">
+                  {project.files.map((f) => (
+                    <li key={f.path}>
+                      <button
+                        type="button"
+                        className="structure-file-item"
+                        onClick={() => setViewFile(f)}
+                      >
+                        <i className="fa-regular fa-file-code"></i>
+                        <span className="structure-file-path">{f.path}</span>
+                        <i className="fa-solid fa-chevron-right structure-file-arrow"></i>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -349,6 +367,20 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
           )}
         </div>
       </div>
+
+      {viewFile && (
+        <div className="modal-overlay" onClick={() => setViewFile(null)}>
+          <div className="modal-card modal-card-lg modal-card-code" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-card-header">
+              <h3><i className="fa-solid fa-file-code"></i> {viewFile.path}</h3>
+              <button className="editor-icon-btn" onClick={() => setViewFile(null)}>
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <CodeBlock path={viewFile.path} content={viewFile.content} language={viewFile.language} lang={lang} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
