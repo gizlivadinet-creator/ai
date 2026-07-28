@@ -5,7 +5,10 @@ interface ExternalSourcesPanelProps {
   query: string;
 }
 
-const DEFAULT_ACTIVE: ExternalSourceId[] = ['wikipedia', 'duckduckgo', 'google', 'github', 'gitlab', 'bitbucket', 'gist', 'codepen', 'archive', 'npm', 'pypi'];
+// All 17 sources search-sources/index.ts knows how to handle (see
+// EXTERNAL_SOURCES above) are active by default — a source only stays out
+// of a search if the user deliberately deselects its chip.
+const DEFAULT_ACTIVE: ExternalSourceId[] = EXTERNAL_SOURCES.map((s) => s.id);
 
 export function ExternalSourcesPanel({ query }: ExternalSourcesPanelProps) {
   const [open, setOpen] = useState(false);
