@@ -7,14 +7,20 @@ interface CategoryBadgeProps {
 }
 
 export function CategoryBadge({ category, lang }: CategoryBadgeProps) {
-  const icons: Record<ProjectCategory, string> = {
-    python: 'fa-python',
-    javascript: 'fa-js',
-    php: 'fa-php',
-    web: 'fa-globe',
-    api: 'fa-server',
-    automation: 'fa-gears',
-    prompt: 'fa-comment-dots',
+  // Font Awesome ships several icon *styles* (brands, solid, regular) and an
+  // icon only renders if you pair it with the style it actually belongs to.
+  // python/javascript/php are real vendor "brand" glyphs (fa-brands), but
+  // web/api/automation/prompt are generic "solid" glyphs (fa-solid) — mixing
+  // them up (e.g. fa-brands + fa-globe) silently renders as a broken/missing
+  // icon box instead of an error, which is what was happening here.
+  const icons: Record<ProjectCategory, { name: string; style: 'fa-brands' | 'fa-solid' }> = {
+    python: { name: 'fa-python', style: 'fa-brands' },
+    javascript: { name: 'fa-js', style: 'fa-brands' },
+    php: { name: 'fa-php', style: 'fa-brands' },
+    web: { name: 'fa-globe', style: 'fa-solid' },
+    api: { name: 'fa-server', style: 'fa-solid' },
+    automation: { name: 'fa-gears', style: 'fa-solid' },
+    prompt: { name: 'fa-comment-dots', style: 'fa-solid' },
   };
   const colors: Record<ProjectCategory, string> = {
     python: 'cat-python',
@@ -26,9 +32,11 @@ export function CategoryBadge({ category, lang }: CategoryBadgeProps) {
     prompt: 'cat-prompt',
   };
 
+  const icon = icons[category];
+
   return (
     <span className={`category-badge ${colors[category]}`}>
-      <i className={`fa-brands ${icons[category]}`}></i>
+      <i className={`${icon.style} ${icon.name}`}></i>
       {t(`cat_${category}`, lang)}
     </span>
   );
