@@ -38,18 +38,41 @@ async function main() {
     auth: { persistSession: false },
   });
 
-  const { data, error } = await supabase
-    .from('projects')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(5000);
+  // Previously capped at `.limit(5000)`, a single request — PostgREST
+  // returns at most one page's worth of rows regardless of `.limit()`
+  // once the table exceeds it, so any project past the cap was silently
+  // missing from the exported projects.json/.gz consumed by the static
+  // site / GitHub Pages build. Page through the whole table instead.
+  const PAGE_SIZE = 500;
+  const projects = [];
+  const seenIds = new Set();
+  let from = 0;
+  for (;;) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-  if (error) {
-    console.error('Supabase sorgu hatası:', error.message);
-    process.exit(1);
+    if (error) {
+      console.error(`Supabase sorgu hatası (satır ${from}-${to}):`, error.message);
+      process.exit(1);
+    }
+
+    const batch = data || [];
+    for (const row of batch) {
+      if (!seenIds.has(row.id)) {
+        seenIds.add(row.id);
+        projects.push(row);
+      }
+    }
+    console.log(`Sayfa alındı: ${from}-${to} (${batch.length} kayıt, toplam ${projects.length}).`);
+
+    if (batch.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
-  const projects = data || [];
   console.log(`Toplam ${projects.length} proje bulundu.`);
 
   const manifest = {
