@@ -12,6 +12,87 @@ import { Breadcrumbs } from './Breadcrumbs';
 const CodeEditorView = lazy(() => import('./CodeEditorView').then((m) => ({ default: m.CodeEditorView })));
 const CommentSection = lazy(() => import('./CommentSection').then((m) => ({ default: m.CommentSection })));
 
+function LivePreviewPanel({ files, lang }: { files: GeneratedFile[]; lang: Language }) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const srcDoc = useMemo(() => {
+    const html = files.find((f) => /\.(html|htm)$/i.test(f.path));
+    const css = files.filter((f) => f.path.toLowerCase().endsWith('.css')).map((f) => f.content).join('\n');
+    const js = files
+      .filter((f) => /\.(js|mjs|cjs)$/i.test(f.path) && !/\.(min)\.js$/i.test(f.path))
+      .map((f) => f.content)
+      .join('\n');
+
+    if (html) {
+      let doc = html.content;
+      if (css && !doc.includes('<style>')) {
+        doc = doc.includes('</head>')
+          ? doc.replace('</head>', `<style>${css}</style></head>`)
+          : `<style>${css}</style>${doc}`;
+      }
+      if (js) {
+        doc = doc.includes('</body>')
+          ? doc.replace('</body>', `<script>${js}<\/script></body>`)
+          : `${doc}<script>${js}<\/script>`;
+      }
+      return doc;
+    }
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:16px;font-family:sans-serif;}${css}</style></head><body><script>${js}<\/script></body></html>`;
+  }, [files]);
+
+  function openInNewTab() {
+    const blob = new Blob([srcDoc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  return (
+    <div className="live-preview-panel">
+      <div className="live-preview-header">
+        <span className="live-preview-title">
+          <i className="fa-solid fa-satellite-dish"></i>
+          {lang === 'tr' ? 'Canlı Önizleme' : 'Live Preview'}
+        </span>
+        <div className="live-preview-actions">
+          <button className="editor-icon-btn" title={lang === 'tr' ? 'Yenile' : 'Refresh'} onClick={() => setReloadKey((k) => k + 1)}>
+            <i className="fa-solid fa-rotate-right"></i>
+          </button>
+          <button className="editor-icon-btn" title={lang === 'tr' ? 'Yeni sekmede aç' : 'Open in new tab'} onClick={openInNewTab}>
+            <i className="fa-solid fa-up-right-from-square"></i>
+          </button>
+          <button
+            className="editor-icon-btn"
+            title={collapsed ? (lang === 'tr' ? 'Genişlet' : 'Expand') : (lang === 'tr' ? 'Daralt' : 'Collapse')}
+            onClick={() => setCollapsed((c) => !c)}
+          >
+            <i className={`fa-solid ${collapsed ? 'fa-chevron-down' : 'fa-chevron-up'}`}></i>
+          </button>
+        </div>
+      </div>
+      {!collapsed && (
+        <>
+          <iframe
+            key={reloadKey}
+            className="live-preview-frame"
+            title="live-preview"
+            sandbox="allow-scripts allow-forms allow-modals allow-popups"
+            srcDoc={srcDoc}
+          />
+          <p className="live-preview-note">
+            <i className="fa-solid fa-circle-info"></i>
+            {lang === 'tr'
+              ? 'Bu önizleme izole (sandboxed) bir iframe içinde çalışır; dosyalarınızı düzenledikten sonra yenile butonuna basın.'
+              : 'This preview runs inside an isolated (sandboxed) iframe; press refresh after editing your files.'}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function PanelLoader() {
   return (
     <div className="panel-loader"><i className="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>
@@ -37,6 +118,12 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
   const testSuite = useMemo(
     () => (testsGenerated ? generateTestSuite(project.files) : null),
     [testsGenerated, project.files],
+  );
+
+  const WEB_EXTENSIONS = ['html', 'htm', 'css', 'js'];
+  const hasWebFiles = useMemo(
+    () => project.files.some((f) => WEB_EXTENSIONS.includes(f.path.split('.').pop()?.toLowerCase() || '')),
+    [project.files],
   );
 
   async function handleDownloadTests() {
@@ -127,19 +214,21 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
       </div>
 
       <div className="container">
-        <div className="tabs" role="tablist">
-          {tabs.map((tb) => (
-            <button
-              key={tb.id}
-              className={`tab ${tab === tb.id ? 'active' : ''}`}
-              onClick={() => setTab(tb.id)}
-              role="tab"
-              aria-selected={tab === tb.id}
-            >
-              <i className={`fa-solid ${tb.icon}`}></i>
-              <span>{tb.label}</span>
-            </button>
-          ))}
+        <div className="tabs-wrap">
+          <div className="tabs" role="tablist">
+            {tabs.map((tb) => (
+              <button
+                key={tb.id}
+                className={`tab ${tab === tb.id ? 'active' : ''}`}
+                onClick={() => setTab(tb.id)}
+                role="tab"
+                aria-selected={tab === tb.id}
+              >
+                <i className={`fa-solid ${tb.icon}`}></i>
+                <span>{tb.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="tab-content">
@@ -293,6 +382,8 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
 
           {tab === 'tests' && (
             <div className="tests-panel">
+              {hasWebFiles && <LivePreviewPanel files={project.files} lang={lang} />}
+
               {!testsGenerated && (
                 <div className="tests-empty">
                   <i className="fa-solid fa-vial fa-3x"></i>
