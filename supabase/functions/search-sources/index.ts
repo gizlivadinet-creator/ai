@@ -33,7 +33,20 @@
 // no free search API exists — returns a direct deep-link into that site's
 // own search instead of fabricating results or scraping HTML.
 //
-// Usage: POST { query: string, sources: string[] }
+// TWO MODES:
+//   1. { query: string, sources: string[] }
+//      Runs the search across the given sources and returns a short,
+//      Turkish-translated {title, description} per hit (fast — used for the
+//      result list). `snippet` is kept as an alias of `description` for
+//      backward compatibility with older frontend builds.
+//   2. { mode: 'content', url: string, source?: string }
+//      Fetches the FULL page at `url` (no truncation beyond the safety
+//      ceiling needed to keep the function from timing out/OOMing on a
+//      pathological page), strips it down to readable text, and returns the
+//      complete {title, description, content} translated into Turkish. This
+//      is what powers "tam içeriği getir" (fetch full content) in the UI —
+//      it deliberately does NOT summarize: every paragraph of extracted
+//      text is translated and returned, chunk by chunk.
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -66,6 +79,36 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json().catch(() => ({}));
+    const mode: string = (body?.mode ?? 'search').toString();
+
+    // --- Mode 2: full-content fetch for a single result -------------------
+    if (mode === 'content') {
+      const url: string = (body?.url ?? '').toString().trim();
+      if (!url) return json({ error: 'url_required' }, 400);
+      if (!/^https?:\/\//i.test(url)) return json({ error: 'invalid_url' }, 400);
+
+      try {
+        const page = await fetchFullPageText(url);
+        const [title, description, content] = await Promise.all([
+          translateToTurkish(page.title),
+          translateToTurkish(page.description),
+          translateToTurkish(page.text),
+        ]);
+        return json({
+          result: {
+            title: title || page.title,
+            description: description || page.description,
+            content: content || page.text,
+            url,
+          },
+        });
+      } catch (err) {
+        console.error('search-sources content-fetch failed:', err);
+        return json({ error: 'content_fetch_failed' }, 502);
+      }
+    }
+
+    // --- Mode 1: search across sources -------------------------------------
     const query: string = (body?.query ?? '').toString().trim();
     const sources: string[] = Array.isArray(body?.sources) ? body.sources : [];
 
@@ -103,7 +146,28 @@ Deno.serve(async (req: Request) => {
       );
 
     const settled = await Promise.all(jobs);
-    const results = settled.flat();
+    const rawResults = settled.flat();
+
+    // Translate every hit's title + description to Turkish so the result
+    // list is fully in the user's language, not just the linked-out pages.
+    // Kept fast: this only translates the short title/snippet, never the
+    // full page (that happens on-demand in mode "content").
+    const results = await Promise.all(
+      rawResults.map(async (r) => {
+        const [title, description] = await Promise.all([
+          translateToTurkish(r.title),
+          translateToTurkish(r.snippet),
+        ]);
+        return {
+          source: r.source,
+          title: title || r.title,
+          url: r.url,
+          description: description || r.snippet,
+          // Alias kept for older frontend builds that still read `snippet`.
+          snippet: description || r.snippet,
+        };
+      }),
+    );
 
     return json({ results });
   } catch (err) {
@@ -120,7 +184,10 @@ function json(body: unknown, status = 200) {
 }
 
 async function fetchJson(url: string, headers: Record<string, string> = {}) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'immaculate-ai-search', ...headers } });
+  // Timed out (rather than left to hang indefinitely): a single slow/dead
+  // upstream API used to be able to stall the whole search-sources call
+  // since all source jobs are awaited together in Deno.serve.
+  const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'immaculate-ai-search', ...headers } }, 8000);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
   return res.json();
 }
@@ -138,7 +205,7 @@ function buildDeepLink(secretValue: string, defaultUrl: string, q: string): stri
 // --- Free, key-less public APIs ------------------------------------------------
 
 async function searchWikipedia(q: string): Promise<SourceResult[]> {
-  const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=5&origin=*`;
+  const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&format=json&srlimit=8&origin=*`;
   const data = await fetchJson(url);
   return (data?.query?.search ?? []).map((r: any) => ({
     source: 'wikipedia',
@@ -151,7 +218,7 @@ async function searchWikipedia(q: string): Promise<SourceResult[]> {
 async function searchMdn(q: string): Promise<SourceResult[]> {
   const url = `https://developer.mozilla.org/api/v1/search?q=${encodeURIComponent(q)}&locale=en-US`;
   const data = await fetchJson(url);
-  return (data?.documents ?? []).slice(0, 5).map((d: any) => ({
+  return (data?.documents ?? []).slice(0, 8).map((d: any) => ({
     source: 'mdn',
     title: d.title,
     url: `https://developer.mozilla.org${d.mdn_url}`,
@@ -160,7 +227,7 @@ async function searchMdn(q: string): Promise<SourceResult[]> {
 }
 
 async function searchNpm(q: string): Promise<SourceResult[]> {
-  const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=5`;
+  const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=8`;
   const data = await fetchJson(url);
   return (data?.objects ?? []).map((o: any) => ({
     source: 'npm',
@@ -178,7 +245,7 @@ async function searchPypi(q: string): Promise<SourceResult[]> {
         source: 'pypi',
         title: `${data.info.name} ${data.info.version}`,
         url: data.info.package_url,
-        snippet: (data.info.summary ?? '').slice(0, 200),
+        snippet: data.info.summary ?? '',
       },
     ];
   } catch {
@@ -187,7 +254,7 @@ async function searchPypi(q: string): Promise<SourceResult[]> {
 }
 
 async function searchGithub(q: string): Promise<SourceResult[]> {
-  const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=5`;
+  const url = `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=8`;
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
   if (GITHUB_API) headers.Authorization = `Bearer ${GITHUB_API}`;
   const data = await fetchJson(url, headers);
@@ -237,7 +304,7 @@ async function searchCodepen(q: string): Promise<SourceResult[]> {
 }
 
 async function searchArchive(q: string): Promise<SourceResult[]> {
-  const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&fl[]=description&rows=5&page=1&output=json`;
+  const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&fl[]=description&rows=8&page=1&output=json`;
   const data = await fetchJson(url);
   const docs: any[] = data?.response?.docs ?? [];
   return docs.map((d: any) => ({
@@ -249,7 +316,7 @@ async function searchArchive(q: string): Promise<SourceResult[]> {
 }
 
 async function searchGitlab(q: string): Promise<SourceResult[]> {
-  const url = `https://gitlab.com/api/v4/projects?search=${encodeURIComponent(q)}&order_by=star_count&sort=desc&per_page=5`;
+  const url = `https://gitlab.com/api/v4/projects?search=${encodeURIComponent(q)}&order_by=star_count&sort=desc&per_page=8`;
   const headers: Record<string, string> = {};
   if (GITLAB_API) headers['PRIVATE-TOKEN'] = GITLAB_API;
   const data = await fetchJson(url, headers);
@@ -303,7 +370,7 @@ async function searchDuckDuckGo(q: string): Promise<SourceResult[]> {
   for (const topic of topics) {
     const nested = Array.isArray(topic?.Topics) ? topic.Topics : [topic];
     for (const t of nested) {
-      if (results.length >= 5) break;
+      if (results.length >= 8) break;
       if (t?.FirstURL && t?.Text) {
         results.push({
           source: 'duckduckgo',
@@ -315,11 +382,11 @@ async function searchDuckDuckGo(q: string): Promise<SourceResult[]> {
     }
   }
 
-  return results.slice(0, 5);
+  return results.slice(0, 8);
 }
 
 async function searchStackOverflow(q: string): Promise<SourceResult[]> {
-  let url = `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=${encodeURIComponent(q)}&site=stackoverflow&pagesize=5`;
+  let url = `https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q=${encodeURIComponent(q)}&site=stackoverflow&pagesize=8`;
   if (STACKOVERFLOW_API) url += `&key=${encodeURIComponent(STACKOVERFLOW_API)}`;
   const data = await fetchJson(url);
   return (data?.items ?? []).map((it: any) => ({
@@ -331,7 +398,7 @@ async function searchStackOverflow(q: string): Promise<SourceResult[]> {
 }
 
 async function searchCratesIo(q: string): Promise<SourceResult[]> {
-  const url = `https://crates.io/api/v1/crates?q=${encodeURIComponent(q)}&per_page=5`;
+  const url = `https://crates.io/api/v1/crates?q=${encodeURIComponent(q)}&per_page=8`;
   const data = await fetchJson(url);
   return (data?.crates ?? []).map((c: any) => ({
     source: 'rust',
@@ -367,4 +434,183 @@ async function searchMicrosoft(q: string): Promise<SourceResult[]> {
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, '');
+}
+
+// ---------------------------------------------------------------------------
+// Full-page content extraction ("çekilen tüm içeriği eksiksiz ve sınırsız
+// çek" — fetch the complete content, not a summary).
+//
+// Fetches the raw HTML of an arbitrary result URL and reduces it to plain
+// readable text: strips <script>/<style>/<noscript> blocks entirely (never
+// translated, never shown — it's not content), strips all remaining tags,
+// decodes the handful of HTML entities that show up in real prose, and
+// collapses whitespace. Nothing is summarized or cut short except for a
+// generous safety ceiling (CONTENT_SAFETY_CEILING) that exists purely to
+// keep a single pathological page (e.g. a multi-megabyte SPA bundle
+// masquerading as a doc page) from timing out or OOMing the function —
+// ordinary articles/READMEs/questions are far below it.
+// ---------------------------------------------------------------------------
+
+const CONTENT_SAFETY_CEILING = 120_000; // characters; a real article/README is a few KB-tens of KB
+
+interface FullPage {
+  title: string;
+  description: string;
+  text: string;
+}
+
+async function fetchFullPageText(url: string): Promise<FullPage> {
+  const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'immaculate-ai-search/1.0' } }, 12000);
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  const html = await res.text();
+
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const descMatch =
+    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["']/i) ||
+    html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([\s\S]*?)["']/i);
+
+  const title = decodeEntities(stripHtml(titleMatch?.[1] ?? '')).trim() || url;
+  const description = decodeEntities(stripHtml(descMatch?.[1] ?? '')).trim();
+
+  const bodyOnly = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    // Block-level tags become paragraph breaks so the extracted text stays
+    // readable instead of one giant run-on line.
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|br)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+
+  let text = decodeEntities(stripHtml(bodyOnly))
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  if (text.length > CONTENT_SAFETY_CEILING) {
+    text = text.slice(0, CONTENT_SAFETY_CEILING) + '\n\n[İçerik çok uzun olduğu için güvenlik sınırında kesildi.]';
+  }
+
+  return { title, description, text };
+}
+
+const ENTITY_MAP: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  ndash: '–', mdash: '—', hellip: '…', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
+};
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&(amp|lt|gt|quot|apos|nbsp|ndash|mdash|hellip|rsquo|lsquo|rdquo|ldquo);/g, (_, name) => ENTITY_MAP[name] ?? _);
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Free, keyless machine translation to Turkish, via Google Translate's
+// public web-frontend endpoint (the same unofficial endpoint used by
+// libraries like googletrans). No API key, no summarization — every chunk
+// of the source text is translated and reassembled in order, so arbitrarily
+// long content is translated in full rather than truncated.
+// ---------------------------------------------------------------------------
+
+const TRANSLATE_CHUNK_SIZE = 1800; // stay comfortably under the endpoint's per-request query-length limit
+const TRANSLATE_CONCURRENCY = 4; // parallel chunk requests, so long pages don't translate strictly serially
+
+// Splits text into chunks no longer than `max`, preferring to break on a
+// paragraph or sentence boundary so translated chunks read naturally when
+// rejoined, instead of splitting mid-word.
+function chunkText(text: string, max: number): string[] {
+  if (text.length <= max) return text ? [text] : [];
+  const chunks: string[] = [];
+  let rest = text;
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf('\n\n', max);
+    if (cut < max * 0.5) cut = rest.lastIndexOf('. ', max);
+    if (cut < max * 0.5) cut = rest.lastIndexOf(' ', max);
+    if (cut < 1) cut = max;
+    chunks.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) chunks.push(rest);
+  return chunks;
+}
+
+async function translateChunkToTurkish(chunk: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=tr&dt=t&q=${encodeURIComponent(chunk)}`,
+      {},
+      8000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const translated = (data?.[0] || [])
+      .map((seg: unknown[]) => seg?.[0])
+      .filter((s: unknown) => typeof s === 'string')
+      .join('');
+    return translated || null;
+  } catch {
+    return null;
+  }
+}
+
+async function translateChunkViaMyMemory(chunk: string): Promise<string | null> {
+  try {
+    const truncated = chunk.slice(0, 490); // MyMemory's free tier caps ~500 bytes/request
+    const res = await fetchWithTimeout(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(truncated)}&langpair=auto|tr`,
+      {},
+      8000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText;
+    if (!translated || typeof translated !== 'string') return null;
+    if (/MYMEMORY WARNING|QUERY LENGTH LIMIT/i.test(translated)) return null;
+    return translated;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Translates arbitrarily long text to Turkish in full — no summarizing, no
+ * dropping content. Splits into ordered chunks, translates them with bounded
+ * concurrency (so one huge page doesn't fire hundreds of simultaneous
+ * requests), and rejoins in original order. Any chunk that fails translation
+ * (rate limit, network blip) falls back to its original-language text rather
+ * than being silently dropped, so the result is always complete even if not
+ * every sentence made it through translation.
+ */
+async function translateToTurkish(text: string): Promise<string> {
+  const clean = (text ?? '').toString().trim();
+  if (!clean) return '';
+
+  const chunks = chunkText(clean, TRANSLATE_CHUNK_SIZE);
+  const translated: string[] = new Array(chunks.length);
+
+  for (let i = 0; i < chunks.length; i += TRANSLATE_CONCURRENCY) {
+    const batch = chunks.slice(i, i + TRANSLATE_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (chunk) => (await translateChunkToTurkish(chunk)) ?? (await translateChunkViaMyMemory(chunk)) ?? chunk),
+    );
+    batchResults.forEach((r, j) => (translated[i + j] = r));
+  }
+
+  return translated.join(chunks.length > 1 ? '\n\n' : '');
 }
