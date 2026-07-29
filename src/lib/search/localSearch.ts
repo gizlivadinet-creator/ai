@@ -2,6 +2,7 @@ import Fuse, { type IFuseOptions } from 'fuse.js';
 import type { Project } from '@/lib/types';
 import { embedText, cosineSimilarity } from './embeddings';
 import { getCachedEmbedding, setCachedEmbedding } from './embeddingCache';
+import { foldTurkish, expandSynonyms } from './turkish';
 
 export interface LocalSearchResult {
   project: Project;
@@ -13,12 +14,37 @@ function projectContent(p: Project): string {
   return [p.title, p.description, p.prompt, ...(p.tags || [])].filter(Boolean).join(' \n ');
 }
 
-const fuseOptions: IFuseOptions<Project> = {
+// Fuse indexes a diacritic-folded ("şifre" -> "sifre") copy of each
+// searchable field rather than the raw text. This makes matching tolerant
+// of missing Turkish characters (very common when typing without a
+// Turkish keyboard) without needing a second, separate search pass — the
+// query is folded the same way before being handed to Fuse, so folded
+// query vs. folded index still lines up correctly for scoring/highlighting
+// purposes, while the *display* text (project.title etc.) stays untouched.
+interface FoldedProject {
+  project: Project;
+  foldedTitle: string;
+  foldedDescription: string;
+  foldedTags: string;
+  foldedPrompt: string;
+}
+
+function foldProject(p: Project): FoldedProject {
+  return {
+    project: p,
+    foldedTitle: foldTurkish(p.title || ''),
+    foldedDescription: foldTurkish(p.description || ''),
+    foldedTags: foldTurkish((p.tags || []).join(' ')),
+    foldedPrompt: foldTurkish(p.prompt || ''),
+  };
+}
+
+const fuseOptions: IFuseOptions<FoldedProject> = {
   keys: [
-    { name: 'title', weight: 0.4 },
-    { name: 'description', weight: 0.25 },
-    { name: 'tags', weight: 0.2 },
-    { name: 'prompt', weight: 0.15 },
+    { name: 'foldedTitle', weight: 0.4 },
+    { name: 'foldedDescription', weight: 0.25 },
+    { name: 'foldedTags', weight: 0.2 },
+    { name: 'foldedPrompt', weight: 0.15 },
   ],
   threshold: 0.4, // 0 = exact match only, 1 = match anything
   ignoreLocation: true,
@@ -26,20 +52,40 @@ const fuseOptions: IFuseOptions<Project> = {
 };
 
 /**
- * Fast, always-available fuzzy search (typo-tolerant). Runs synchronously
- * over whatever project list is already loaded — no network, no model.
+ * Fast, always-available fuzzy search (typo-tolerant, Turkish
+ * diacritic-tolerant, synonym-aware). Runs synchronously over whatever
+ * project list is already loaded — no network, no model.
  */
 export function fuzzySearch(projects: Project[], query: string, limit = 30): LocalSearchResult[] {
   if (!query.trim()) return [];
-  const fuse = new Fuse(projects, fuseOptions);
-  return fuse
-    .search(query)
-    .slice(0, limit)
-    .map((r) => ({
-      project: r.item,
-      score: 1 - (r.score ?? 0), // Fuse: lower score = better match, so invert
-      matchType: 'fuzzy' as const,
-    }));
+
+  const folded = projects.map(foldProject);
+  const fuse = new Fuse(folded, fuseOptions);
+
+  // Search once per synonym variant (typically just 1-3 short queries),
+  // merging by project and keeping each project's single best score. This
+  // is what lets a search for "hızlı" also surface projects only tagged
+  // "performans" or "optimize", and "sifre" find "şifre" content.
+  const variants = expandSynonyms(query);
+  const bestScore = new Map<string, number>();
+
+  for (const variant of variants) {
+    const foldedQuery = foldTurkish(variant);
+    const results = fuse.search(foldedQuery);
+    for (const r of results) {
+      const score = 1 - (r.score ?? 0); // Fuse: lower score = better match, so invert
+      const id = r.item.project.id;
+      const existing = bestScore.get(id) ?? -Infinity;
+      if (score > existing) bestScore.set(id, score);
+    }
+  }
+
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  return Array.from(bestScore.entries())
+    .map(([id, score]) => ({ project: byId.get(id)!, score, matchType: 'fuzzy' as const }))
+    .filter((r) => r.project)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
 }
 
 // Cosine similarity between two arbitrary, unrelated MiniLM sentence
