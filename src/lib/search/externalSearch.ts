@@ -4,7 +4,18 @@ export interface ExternalSourceResult {
   source: string;
   title: string;
   url: string;
+  /** Short, Turkish-translated description for the result list. */
+  description: string;
+  /** @deprecated alias of `description`, kept for older call sites. */
   snippet: string;
+}
+
+export interface ExternalSourceFullContent {
+  title: string;
+  description: string;
+  /** Complete, untruncated (aside from a large safety ceiling), Turkish-translated page content. */
+  content: string;
+  url: string;
 }
 
 export const EXTERNAL_SOURCES = [
@@ -45,4 +56,25 @@ export async function searchExternalSources(
   }
 
   return (data?.results as ExternalSourceResult[]) ?? [];
+}
+
+/**
+ * Fetches the COMPLETE content of a single result — not a summary — and
+ * returns it already organized into {title, description, content} and
+ * translated into Turkish. Called on demand (e.g. when the user expands a
+ * result), since translating a full page is heavier than the list search.
+ */
+export async function fetchSourceContent(url: string): Promise<ExternalSourceFullContent | null> {
+  if (!url.trim()) return null;
+
+  const { data, error } = await supabase.functions.invoke('search-sources', {
+    body: { mode: 'content', url },
+  });
+
+  if (error) {
+    console.warn('search-sources content fetch unavailable:', error);
+    return null;
+  }
+
+  return (data?.result as ExternalSourceFullContent) ?? null;
 }
