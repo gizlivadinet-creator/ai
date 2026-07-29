@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    # Hourly — keeps public/data/*.json and sitemap.xml in sync with
+    # Supabase even when nothing was pushed to main (e.g. new projects
+    # created directly through the app, not via a code change).
+    - cron: '0 * * * *'
 
 permissions:
   contents: read
@@ -89,6 +94,10 @@ jobs:
   deploy-edge-functions:
     runs-on: ubuntu-latest
     needs: build
+    # Only on an actual code push or manual run — DB migrations and edge
+    # function deploys aren't related to the hourly data/sitemap refresh,
+    # so the schedule trigger skips this job entirely.
+    if: github.event_name != 'schedule'
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
