@@ -819,14 +819,6 @@ body { top: 0 !important; position: static !important; }
 }
 .btn-google-signin:hover { border-color: var(--primary); box-shadow: var(--shadow-sm); transform: translateY(-1px); }
 
-/* Google's own rendered Sign-In button (see GoogleSignInButton.tsx). It's an
-   iframe Google controls the internal styling of; this just keeps it aligned
-   with the rest of the header and stops it overflowing on narrow screens. */
-.google-signin-button { display: flex; align-items: center; overflow: hidden; max-width: 100%; }
-@media (max-width: 640px) {
-  .google-signin-button { transform: scale(0.9); transform-origin: right center; }
-}
-
 .user-menu { position: relative; }
 .user-menu-trigger {
   display: flex; align-items: center; gap: 8px;
