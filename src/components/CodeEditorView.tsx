@@ -19,6 +19,7 @@ export function CodeEditorView({ project, lang }: Props) {
     useProjectFiles(project.id, profile);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showAddFile, setShowAddFile] = useState(false);
+  const [addFileError, setAddFileError] = useState<string | null>(null);
   const [showSandbox, setShowSandbox] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -64,7 +65,14 @@ export function CodeEditorView({ project, lang }: Props) {
         <div className="editor-sidebar-header">
           <h4>{t('code_files', lang)}</h4>
           {canEdit && (
-            <button className="editor-icon-btn" title={t('add_file', lang)} onClick={() => setShowAddFile(true)}>
+            <button
+              className="editor-icon-btn"
+              title={t('add_file', lang)}
+              onClick={() => {
+                setAddFileError(null);
+                setShowAddFile(true);
+              }}
+            >
               <i className="fa-solid fa-plus"></i>
             </button>
           )}
@@ -170,11 +178,24 @@ export function CodeEditorView({ project, lang }: Props) {
       {showAddFile && (
         <AddFileModal
           lang={lang}
-          onClose={() => setShowAddFile(false)}
-          onCreate={async (path, language) => {
-            const created = await addFile(project.id, path, '', language);
-            setActiveId(created.id);
+          error={addFileError}
+          onClose={() => {
+            setAddFileError(null);
             setShowAddFile(false);
+          }}
+          onCreate={async (path, language) => {
+            setAddFileError(null);
+            try {
+              const created = await addFile(project.id, path, '', language);
+              setActiveId(created.id);
+              setShowAddFile(false);
+            } catch (err) {
+              const message =
+                err instanceof Error && err.message === 'duplicate_path'
+                  ? t('duplicate_path', lang)
+                  : t('error_generic', lang);
+              setAddFileError(message);
+            }
           }}
         />
       )}
@@ -190,7 +211,17 @@ export function CodeEditorView({ project, lang }: Props) {
   );
 }
 
-function AddFileModal({ lang, onClose, onCreate }: { lang: Language; onClose: () => void; onCreate: (path: string, language: string) => void }) {
+function AddFileModal({
+  lang,
+  error,
+  onClose,
+  onCreate,
+}: {
+  lang: Language;
+  error: string | null;
+  onClose: () => void;
+  onCreate: (path: string, language: string) => void;
+}) {
   const [path, setPath] = useState('');
 
   return (
@@ -207,6 +238,11 @@ function AddFileModal({ lang, onClose, onCreate }: { lang: Language; onClose: ()
             if (e.key === 'Enter' && path.trim()) onCreate(path.trim(), languageFromPath(path.trim()));
           }}
         />
+        {error && (
+          <p className="error-banner" style={{ marginTop: 8 }}>
+            <i className="fa-solid fa-circle-exclamation"></i> {error}
+          </p>
+        )}
         <div className="modal-actions">
           <button className="action-btn" onClick={onClose}>{t('back', lang)}</button>
           <button

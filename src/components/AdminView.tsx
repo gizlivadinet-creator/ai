@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, fetchAllRows } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { t } from '@/lib/i18n';
 import type { Language, Profile, Comment, Project, SiteSetting, AuditLogEntry } from '@/lib/types';
@@ -207,16 +207,28 @@ function ProjectsTab({ lang }: { lang: Language }) {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false }).limit(200);
-    setProjects((data as Project[]) || []);
-    setLoading(false);
+    try {
+      // Previously hard-capped at the 200 most recent projects, which made
+      // it impossible for an admin to find or clean up duplicates/older
+      // records once the table grew past that. Paginate through all of it.
+      const { rows, truncated } = await fetchAllRows<Project>((from, to) =>
+        supabase.from('projects').select('*').order('created_at', { ascending: false }).range(from, to),
+      );
+      if (truncated) console.warn('AdminView.ProjectsTab: result set was truncated by the safety ceiling.');
+      setProjects(rows);
+    } catch (e) {
+      console.error('AdminView.ProjectsTab load() failed:', e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, []);
 
   async function remove(id: string) {
     if (!confirm(t('confirm_delete', lang))) return;
-    await supabase.from('projects').delete().eq('id', id);
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (error) console.error('AdminView.ProjectsTab remove() failed:', error.message);
     load();
   }
 
