@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Immaculate AI</title>
+    <!--
+      GitHub Pages has no server-side router: any direct load or refresh of
+      a path like /p/my-project returns this 404.html file. We use it to
+      redirect back to index.html while encoding the originally requested
+      path/query/hash into the query string, then a small script in
+      index.html reads it back out and restores the real URL via
+      history.replaceState before the app boots. This preserves clean,
+      SEO-friendly URLs (https://immaculate.eu.cc/p/my-project) without
+      needing a real server.
+
+      Based on the well-established spa-github-pages pattern
+      (https://github.com/rafgraph/spa-github-pages).
+    -->
+    <script>
+      (function () {
+        var l = window.location;
+        l.replace(
+          l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+          '/?redirect=' + encodeURIComponent(l.pathname + l.search + l.hash)
+        );
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

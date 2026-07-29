@@ -1,0 +1,19 @@
+{
+  "name": "Immaculate AI",
+  "short_name": "Immaculate AI",
+  "description": "Yeni nesil yapay zekâ kod üretim platformu.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
