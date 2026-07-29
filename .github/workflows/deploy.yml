@@ -65,10 +65,19 @@ jobs:
       - name: Build Project
         run: npm run build
 
+      - name: Prerender Project Pages
+        # Generates a real, physical dist/p/<slug>/index.html per project so
+        # GitHub Pages serves a genuine HTTP 200 (not the 404.html
+        # client-redirect trick) with the project's title/description/
+        # canonical/OG/Twitter tags and JSON-LD already present in the raw
+        # HTML. Fixes schema/crawler validators rejecting /p/<slug> URLs.
+        run: node ./scripts/prerender-projects.mjs
+
       - name: Verify Dist
         run: |
           ls -lah dist
           ls -lah dist/data || true
+          ls -lah dist/p || true
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
