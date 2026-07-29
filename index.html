@@ -114,6 +114,18 @@
       rel="stylesheet"
     />
 
+    <!--
+      Loaded here (not injected via JS after mount, as before) so every
+      fa-solid/fa-regular icon across the app is already styled at first
+      paint instead of rendering invisible and popping in once a
+      post-mount script finishes fetching the stylesheet.
+    -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+    />
+
     <title>Immaculate AI - AI Coding Platform</title>
 
     <script type="application/ld+json">
