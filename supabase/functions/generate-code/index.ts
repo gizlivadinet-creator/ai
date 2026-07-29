@@ -471,7 +471,10 @@ async function callPollinations(prompt: string, ecosystemContext: string): Promi
 // ---------------------------------------------------------------------------
 const CODE_FILE_EXTENSIONS = [
   '.js', '.jsx', '.ts', '.tsx', '.py', '.php', '.java', '.go', '.rb',
-  '.rs', '.c', '.cpp', '.cs', '.html', '.css', '.json', '.md',
+  '.rs', '.c', '.cpp', '.cs', '.html', '.htm', '.css', '.scss', '.less',
+  '.json', '.md', '.xml', '.svg', '.liquid', '.twig', '.yml', '.yaml',
+  '.sh', '.sql', '.kt', '.swift', '.dart', '.vue', '.svelte', '.mjs',
+  '.cjs', '.env.example', '.txt', '.ini', '.toml',
 ];
 
 const EXCLUDED_PATH_SEGMENTS = [
@@ -555,6 +558,8 @@ const KNOWN_TECH_TERMS = [
   'node', 'django', 'flask', 'laravel', 'nextjs', 'api', 'rest',
   'scraper', 'crawler', 'automation', 'extension', 'plugin', 'addon',
   'template', 'dashboard', 'admin', 'panel', 'game', 'oyun',
+  'phpbb', 'mybb', 'vbulletin', 'discourse', 'forum', 'icon', 'iconset',
+  'svg', 'favicon', 'theme', 'skin', 'widget',
 ];
 
 // Common Turkish filler/verb words that add noise to a GitHub search query
@@ -632,87 +637,108 @@ async function buildFromGitHub(prompt: string): Promise<GenerationResult> {
   //      function essentially never comes up completely empty.
   const queries = await buildGithubQueryCandidates(prompt);
 
-  let repos: Array<{
+  type Repo = {
     full_name: string;
     default_branch: string;
     html_url: string;
     description: string | null;
     language: string | null;
     stargazers_count: number;
-  }> = [];
+  };
+
+  const triedRepos = new Set<string>();
+  let anyReposFound = false;
 
   for (const q of queries) {
     const searchRes = await fetchWithTimeout(
-      `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=5`,
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=6`,
       { headers },
       8000,
     );
     if (!searchRes.ok) continue;
     const searchData = await searchRes.json();
-    const items = (searchData.items || []) as typeof repos;
-    if (items.length) {
-      repos = items;
-      break;
+    const repos = (searchData.items || []) as Repo[];
+    if (!repos.length) continue;
+    anyReposFound = true;
+
+    // Try every repo returned by this query before moving on to the next,
+    // broader query candidate — a query "hitting" doesn't guarantee any of
+    // its repos actually contain usable source files (e.g. binary-only or
+    // huge monorepos), so we must keep going instead of giving up early.
+    for (const repo of repos) {
+      if (triedRepos.has(repo.full_name)) continue;
+      triedRepos.add(repo.full_name);
+
+      const result = await tryExtractFilesFromRepo(repo, headers);
+      if (result) return result;
     }
   }
-  if (!repos.length) throw new Error('No matching public GitHub repositories found.');
 
-  // Try repos in order of stars until we find one we can pull real files from.
-  for (const repo of repos) {
-    try {
-      const treeRes = await fetchWithTimeout(
-        `https://api.github.com/repos/${repo.full_name}/git/trees/${repo.default_branch}?recursive=1`,
-        { headers },
+  if (!anyReposFound) throw new Error('No matching public GitHub repositories found.');
+  throw new Error('Found candidate repositories but could not retrieve usable source files from any of them.');
+}
+
+async function tryExtractFilesFromRepo(
+  repo: {
+    full_name: string;
+    default_branch: string;
+    html_url: string;
+    description: string | null;
+    language: string | null;
+  },
+  headers: Record<string, string>,
+): Promise<GenerationResult | null> {
+  try {
+    const treeRes = await fetchWithTimeout(
+      `https://api.github.com/repos/${repo.full_name}/git/trees/${repo.default_branch}?recursive=1`,
+      { headers },
+      8000,
+    );
+    if (!treeRes.ok) return null;
+    const treeData = await treeRes.json();
+    const allPaths: string[] = (treeData.tree || [])
+      .filter((n: { type: string; path: string }) => n.type === 'blob')
+      .map((n: { path: string }) => n.path);
+
+    const candidatePaths = allPaths
+      .filter((p) => CODE_FILE_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)))
+      .filter((p) => !EXCLUDED_PATH_SEGMENTS.some((seg) => p.toLowerCase().includes(seg)))
+      .slice(0, 12);
+    if (!candidatePaths.length) return null;
+
+    const files: GeneratedFile[] = [];
+    for (const path of candidatePaths) {
+      const rawRes = await fetchWithTimeout(
+        `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/${path}`,
+        {},
         8000,
       );
-      if (!treeRes.ok) continue;
-      const treeData = await treeRes.json();
-      const allPaths: string[] = (treeData.tree || [])
-        .filter((n: { type: string; path: string }) => n.type === 'blob')
-        .map((n: { path: string }) => n.path);
-
-      const candidatePaths = allPaths
-        .filter((p) => CODE_FILE_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)))
-        .filter((p) => !EXCLUDED_PATH_SEGMENTS.some((seg) => p.toLowerCase().includes(seg)))
-        .slice(0, 8);
-      if (!candidatePaths.length) continue;
-
-      const files: GeneratedFile[] = [];
-      for (const path of candidatePaths.slice(0, 6)) {
-        const rawRes = await fetchWithTimeout(
-          `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/${path}`,
-          {},
-          8000,
-        );
-        if (!rawRes.ok) continue;
-        const content = await rawRes.text();
-        if (content.length > 50000) continue; // skip huge files
-        files.push({ path, content, language: languageFromPath(path) });
-        if (files.length >= 5) break;
-      }
-      if (!files.length) continue;
-
-      return {
-        is_code_request: true,
-        title: repo.full_name,
-        description:
-          (repo.description || `A real, existing open-source project matching your request.`) +
-          ` (Sourced live from the public GitHub repository ${repo.full_name} — both AI providers were temporarily unavailable, so this is real working code from an existing project rather than freshly generated code.)`,
-        category: 'web',
-        primary_language: repo.language || languageFromPath(files[0].path),
-        file_structure: files.map((f) => f.path).join('\n'),
-        files,
-        install_guide: `1. This project was pulled directly from ${repo.html_url}\n2. Clone or download the full repository: \`git clone https://github.com/${repo.full_name}.git\`\n3. Follow that repository's own README for setup and install instructions, since only a subset of files is shown here.`,
-        tags: [repo.language || 'code', 'github', 'fallback'],
-        performance_analysis: 'Not analyzed — this is existing third-party code pulled as a fallback, not freshly generated.',
-        seo_analysis: 'Not applicable — this is existing third-party code pulled as a fallback, not freshly generated.',
-      };
-    } catch {
-      continue;
+      if (!rawRes.ok) continue;
+      const content = await rawRes.text();
+      if (content.length > 80000) continue; // skip huge files
+      files.push({ path, content, language: languageFromPath(path) });
+      if (files.length >= 6) break;
     }
-  }
+    if (!files.length) return null;
 
-  throw new Error('Found candidate repositories but could not retrieve usable source files from any of them.');
+    return {
+      is_code_request: true,
+      title: repo.full_name,
+      description:
+        (repo.description || `A real, existing open-source project matching your request.`) +
+        ` (Sourced live from the public GitHub repository ${repo.full_name} — both AI providers were temporarily unavailable, so this is real working code from an existing project rather than freshly generated code.)`,
+      category: 'web',
+      primary_language: repo.language || languageFromPath(files[0].path),
+      file_structure: files.map((f) => f.path).join('\n'),
+      files,
+      install_guide: `1. This project was pulled directly from ${repo.html_url}\n2. Clone or download the full repository: \`git clone https://github.com/${repo.full_name}.git\`\n3. Follow that repository's own README for setup and install instructions, since only a subset of files is shown here.`,
+      tags: [repo.language || 'code', 'github', 'fallback'],
+      performance_analysis: 'Not analyzed — this is existing third-party code pulled as a fallback, not freshly generated.',
+      seo_analysis: 'Not applicable — this is existing third-party code pulled as a fallback, not freshly generated.',
+    };
+  } catch {
+    return null;
+  }
 }
 
 function languageFromPath(path: string): string {
