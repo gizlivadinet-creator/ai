@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useFontAwesome } from '@/lib/fontawesome';
 import { useRouter, navigate } from '@/lib/router';
 import { applyRouteSeo } from '@/lib/seo';
 import { t } from '@/lib/i18n';
@@ -15,7 +14,6 @@ import { NotFoundView } from '@/components/NotFoundView';
 import { useProject } from '@/lib/hooks';
 
 function App() {
-  useFontAwesome();
   const route = useRouter();
   const [lang, setLang] = useState<Language>(() => {
     return (localStorage.getItem('immaculate-lang') as Language) || 'tr';
