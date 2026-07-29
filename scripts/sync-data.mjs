@@ -22,11 +22,64 @@ const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://jjspourlctgyrtaxrxon.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+const SITE_URL = 'https://immaculate.eu.cc';
 const DATA_DIR = resolve(__dirname, '..', 'public', 'data');
+const PUBLIC_DIR = resolve(__dirname, '..', 'public');
+
+function xmlEscape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]
+  ));
+}
+
+/**
+ * Writes public/sitemap.xml from the static routes plus every project's
+ * clean /p/<slug> URL. Runs at data-sync time (hourly, via GitHub Actions)
+ * so the sitemap stays in sync with the knowledge pool without needing a
+ * live server to generate it on demand.
+ */
+function writeSitemap(projects) {
+  const staticEntries = [
+    { loc: '/', changefreq: 'daily', priority: '1.0' },
+    { loc: '/library', changefreq: 'hourly', priority: '0.9' },
+    { loc: '/about', changefreq: 'monthly', priority: '0.5' },
+  ];
+
+  const projectEntries = projects
+    .filter((p) => p.slug)
+    .map((p) => ({
+      loc: `/p/${encodeURIComponent(p.slug)}`,
+      lastmod: p.updated_at || p.created_at,
+      changefreq: 'weekly',
+      priority: '0.7',
+    }));
+
+  const urls = [...staticEntries, ...projectEntries]
+    .map((e) => {
+      const lastmodTag = e.lastmod ? `\n    <lastmod>${new Date(e.lastmod).toISOString()}</lastmod>` : '';
+      return (
+        `  <url>\n` +
+        `    <loc>${xmlEscape(SITE_URL + e.loc)}</loc>${lastmodTag}\n` +
+        `    <changefreq>${e.changefreq}</changefreq>\n` +
+        `    <priority>${e.priority}</priority>\n` +
+        `  </url>`
+      );
+    })
+    .join('\n');
+
+  const xml =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+
+  const sitemapPath = resolve(PUBLIC_DIR, 'sitemap.xml');
+  writeFileSync(sitemapPath, xml, 'utf-8');
+  console.log(`Yazıldı: ${sitemapPath} (${staticEntries.length + projectEntries.length} URL)`);
+}
 
 async function main() {
   if (!SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('SUPABASE_SERVICE_ROLE_KEY eksik. Export atlandı.');
+    console.error('SUPABASE_SERVICE_ROLE_KEY eksik. Export atlandı, sadece statik sitemap yazılıyor.');
+    writeSitemap([]);
     process.exit(0);
   }
 
@@ -105,6 +158,8 @@ async function main() {
   const indexPath = resolve(DATA_DIR, 'index.json');
   writeFileSync(indexPath, JSON.stringify(index, null, 2), 'utf-8');
   console.log(`Yazıldı: ${indexPath}`);
+
+  writeSitemap(projects);
 
   console.log('Export tamam.');
 }
