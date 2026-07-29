@@ -14,7 +14,7 @@ const CommentSection = lazy(() => import('./CommentSection').then((m) => ({ defa
 
 function PanelLoader() {
   return (
-    <div className="admin-empty"><i className="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>
+    <div className="panel-loader"><i className="fa-solid fa-circle-notch fa-spin fa-2x"></i></div>
   );
 }
 
