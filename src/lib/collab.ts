@@ -131,14 +131,29 @@ export function useProjectFiles(projectId: string | undefined, profile: Profile 
   }, [profile?.id]);
 
   const addFile = useCallback(async (projId: string, path: string, content: string, language: string) => {
+    // Without this check, creating a file whose path already exists in the
+    // project silently inserted a second `project_files` row with an
+    // identical `path`. Nothing downstream (the editor's file list, or the
+    // ZIP export in download.ts) can tell those two rows apart by name —
+    // the export ends up silently dropping one of them, and the editor
+    // shows two indistinguishable entries. Reject the collision up front
+    // instead.
+    const normalizedPath = path.trim().replace(/^\/+/, '');
+    if (files.some((f) => f.path === normalizedPath)) {
+      throw new Error('duplicate_path');
+    }
+
     const { data, error } = await supabase
       .from('project_files')
-      .insert({ project_id: projId, path, content, language })
+      .insert({ project_id: projId, path: normalizedPath, content, language })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('addFile() failed:', error.message);
+      throw error;
+    }
     return data as ProjectFile;
-  }, []);
+  }, [files]);
 
   const deleteFile = useCallback(async (fileId: string) => {
     const { error } = await supabase.from('project_files').delete().eq('id', fileId);

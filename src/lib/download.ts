@@ -4,8 +4,30 @@ import { downloadBlob, slugify } from './utils';
 
 export async function createZipBlob(files: GeneratedFile[]): Promise<Blob> {
   const zip = new JSZip();
+  // JSZip silently overwrites an existing entry if two files share the
+  // same `path`, so a stray duplicate anywhere upstream (a bad edit, a
+  // race in collaborative editing, imported data, etc.) would quietly
+  // drop content from the downloaded archive with no error and no trace.
+  // Last line of defense: rename any collision with a numeric suffix
+  // instead of overwriting, and log it so it's visible during debugging.
+  const seenPaths = new Set<string>();
   files.forEach((file) => {
-    zip.file(file.path, file.content);
+    let path = file.path;
+    if (seenPaths.has(path)) {
+      const dotIndex = path.lastIndexOf('.');
+      const base = dotIndex > 0 ? path.slice(0, dotIndex) : path;
+      const ext = dotIndex > 0 ? path.slice(dotIndex) : '';
+      let suffix = 2;
+      let candidate = `${base} (${suffix})${ext}`;
+      while (seenPaths.has(candidate)) {
+        suffix += 1;
+        candidate = `${base} (${suffix})${ext}`;
+      }
+      console.warn(`createZipBlob: duplicate path "${path}" renamed to "${candidate}" to avoid data loss.`);
+      path = candidate;
+    }
+    seenPaths.add(path);
+    zip.file(path, file.content);
   });
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
 }

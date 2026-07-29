@@ -103,36 +103,54 @@ export function generateProject(prompt: string): GenerationResult {
   return result;
 }
 
+interface FileTreeNode {
+  dirs: Map<string, FileTreeNode>;
+  files: string[];
+}
+
+// Builds a genuine nested tree (every intermediate directory is its own
+// node, however deep) instead of grouping files by their full directory
+// string. The old approach re-printed the same parent path as a prefix on
+// every line (e.g. "src/", then "src/lib/", then "src/lib/search/" as three
+// separate top-level entries) rather than nesting them — every file was
+// still technically listed, but subdirectories never visually nested under
+// their parent, which reads as folders being skipped or scattered.
 function buildFileStructure(files: GeneratedFile[]): string {
-  const tree: Record<string, string[]> = {};
+  const root: FileTreeNode = { dirs: new Map(), files: [] };
+
   files.forEach((f) => {
-    const parts = f.path.split('/');
-    if (parts.length === 1) {
-      tree['__root__'] = tree['__root__'] || [];
-      tree['__root__'].push(parts[0]);
-    } else {
-      const dir = parts.slice(0, -1).join('/');
-      tree[dir] = tree[dir] || [];
-      tree[dir].push(parts[parts.length - 1]);
+    const parts = f.path.split('/').filter(Boolean);
+    const fileName = parts.pop();
+    if (!fileName) return; // guards against a stray trailing slash
+    let node = root;
+    for (const dirName of parts) {
+      let child = node.dirs.get(dirName);
+      if (!child) {
+        child = { dirs: new Map(), files: [] };
+        node.dirs.set(dirName, child);
+      }
+      node = child;
     }
+    node.files.push(fileName);
   });
 
-  let out = '';
-  Object.keys(tree)
-    .sort()
-    .forEach((dir) => {
-      if (dir === '__root__') {
-        tree[dir].sort().forEach((f) => {
-          out += `${f}\n`;
-        });
-      } else {
-        out += `${dir}/\n`;
-        tree[dir].sort().forEach((f) => {
-          out += `  ${f}\n`;
-        });
-      }
-    });
-  return out.trim();
+  const lines: string[] = [];
+  function render(node: FileTreeNode, depth: number) {
+    const indent = '  '.repeat(depth);
+    [...node.dirs.keys()]
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((dirName) => {
+        lines.push(`${indent}${dirName}/`);
+        render(node.dirs.get(dirName)!, depth + 1);
+      });
+    [...node.files]
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((fileName) => {
+        lines.push(`${indent}${fileName}`);
+      });
+  }
+  render(root, 0);
+  return lines.join('\n').trim();
 }
 
 function meta(name: string, desc: string): { perf: string; seo: string } {

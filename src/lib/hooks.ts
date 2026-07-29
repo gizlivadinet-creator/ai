@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, fetchAllRows, escapeIlikeValue } from '@/lib/supabase';
 import { slugify } from '@/lib/utils';
 import { generateProjectRemote, GenerationError } from '@/lib/aiClient';
 import type { Project } from '@/lib/types';
@@ -29,15 +29,24 @@ export function useGenerate() {
       // The knowledge pool is meant to deduplicate identical requests
       // (see AboutView / i18n "duplicate_found") — previously nothing
       // actually checked for this and every submission created a new row.
+      //
+      // The prompt is escaped before being used as an `ilike` pattern: a
+      // raw, unescaped prompt containing a literal `%` or `_` (e.g. "50%
+      // faster script" or "my_bot") would otherwise be interpreted as a
+      // SQL wildcard, causing this exact-match lookup to either miss a
+      // real duplicate or, worse, match a completely different prompt.
       const { data: existing, error: lookupError } = await supabase
         .from('projects')
         .select('*')
-        .ilike('prompt', trimmed)
+        .ilike('prompt', escapeIlikeValue(trimmed))
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
-      if (lookupError) throw lookupError;
+      if (lookupError) {
+        console.error('generate(): duplicate lookup failed:', lookupError.message);
+        throw lookupError;
+      }
 
       if (existing) {
         setDuplicate(true);
@@ -97,24 +106,43 @@ export function useProjects() {
 
   async function fetchProjects(category?: string, search?: string) {
     setLoading(true);
+    setError(null);
     try {
-      let query = supabase
-        .from('projects')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Previously capped at `.limit(100)`, so once the library grew past
+      // 100 projects the client-side hybrid search in LibraryView (which
+      // ranks whatever this hook loaded) silently had no way to ever
+      // surface anything older — looking like broken/incomplete/"random"
+      // search results even though the search logic itself was fine.
+      // fetchAllRows pages through the entire table instead.
+      const { rows, truncated } = await fetchAllRows<Project>((from, to) => {
+        let query = supabase
+          .from('projects')
+          .select('*')
+          .order('created_at', { ascending: false });
 
-      if (category && category !== 'all') {
-        query = query.eq('category', category);
+        if (category && category !== 'all') {
+          query = query.eq('category', category);
+        }
+        if (search && search.trim()) {
+          // Escaped + double-quote-wrapped: a raw search string containing
+          // `%`, `_`, a comma, or parentheses used to either act as an
+          // unintended wildcard or break the `.or()` filter syntax
+          // outright (commas are field separators in `.or()`), producing
+          // wrong or truncated matches.
+          const safe = escapeIlikeValue(search.trim());
+          query = query.or(
+            `title.ilike."%${safe}%",description.ilike."%${safe}%",prompt.ilike."%${safe}%"`,
+          );
+        }
+        return query.range(from, to);
+      });
+
+      if (truncated) {
+        console.warn('fetchProjects: result set was truncated by the safety ceiling.');
       }
-      if (search) {
-        query = query.or(
-          `title.ilike.%${search}%,description.ilike.%${search}%,prompt.ilike.%${search}%`,
-        );
-      }
-      const { data, error: fetchError } = await query.limit(100);
-      if (fetchError) throw fetchError;
-      setProjects((data as Project[]) || []);
+      setProjects(rows);
     } catch (e) {
+      console.error('fetchProjects() failed:', e);
       setError(e instanceof Error ? e.message : 'error_generic');
     } finally {
       setLoading(false);
@@ -170,11 +198,14 @@ export function useStats() {
         const { count } = await supabase
           .from('projects')
           .select('*', { count: 'exact', head: true });
-        const { data: catData } = await supabase
-          .from('projects')
-          .select('category, primary_language');
-        const categories = new Set(catData?.map((d: { category: string }) => d.category)).size;
-        const languages = new Set(catData?.map((d: { primary_language: string }) => d.primary_language)).size;
+        // Paginated rather than a single unbounded select — PostgREST's
+        // default row cap would otherwise silently under-count distinct
+        // categories/languages once the table passed that cap.
+        const { rows: catData } = await fetchAllRows<{ id: string; category: string; primary_language: string }>(
+          (from, to) => supabase.from('projects').select('id, category, primary_language').range(from, to),
+        );
+        const categories = new Set(catData.map((d) => d.category)).size;
+        const languages = new Set(catData.map((d) => d.primary_language)).size;
         setStats({
           total: count || 0,
           categories,
