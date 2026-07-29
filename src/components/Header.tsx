@@ -29,41 +29,41 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
   return (
     <header className="header" role="banner">
       <div className="header-inner">
-        <a href="#/" className="logo" onClick={() => navigate('/')}>
+        <a href="/" className="logo" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
           <i className="fa-solid fa-code logo-icon"></i>
           <span className="logo-text">Immaculate<span className="logo-accent">AI</span></span>
         </a>
 
         <nav className="nav" aria-label={t('nav_library', lang)}>
           <a
-            href="#/"
+            href="/"
             className={`nav-link ${current === 'home' ? 'active' : ''}`}
-            onClick={() => navigate('/')}
+            onClick={(e) => { e.preventDefault(); navigate('/'); }}
           >
             <i className="fa-solid fa-wand-magic-sparkles"></i>
             <span>{t('nav_new', lang)}</span>
           </a>
           <a
-            href="#/library"
+            href="/library"
             className={`nav-link ${current === 'library' || current === 'project' ? 'active' : ''}`}
-            onClick={() => navigate('/library')}
+            onClick={(e) => { e.preventDefault(); navigate('/library'); }}
           >
             <i className="fa-solid fa-folder-tree"></i>
             <span>{t('nav_library', lang)}</span>
           </a>
           <a
-            href="#/about"
+            href="/about"
             className={`nav-link ${current === 'about' ? 'active' : ''}`}
-            onClick={() => navigate('/about')}
+            onClick={(e) => { e.preventDefault(); navigate('/about'); }}
           >
             <i className="fa-solid fa-circle-info"></i>
             <span>{t('nav_about', lang)}</span>
           </a>
           {isAdmin && (
             <a
-              href="#/admin"
+              href="/admin"
               className={`nav-link nav-link-admin ${current === 'admin' ? 'active' : ''}`}
-              onClick={() => navigate('/admin')}
+              onClick={(e) => { e.preventDefault(); navigate('/admin'); }}
             >
               <i className="fa-solid fa-shield-halved"></i>
               <span>{t('admin_panel', lang)}</span>

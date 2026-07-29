@@ -4,6 +4,7 @@ import type { Language, Project } from '@/lib/types';
 import { navigate } from '@/lib/router';
 import { useProjects } from '@/lib/hooks';
 import { CategoryBadge, CategoryFilter } from './CategoryBadge';
+import { Breadcrumbs } from './Breadcrumbs';
 import { formatDate, timeAgo } from '@/lib/utils';
 import { deleteProject } from '@/lib/hooks';
 import { hybridSearch, type LocalSearchResult } from '@/lib/search/localSearch';
@@ -79,6 +80,12 @@ export function LibraryView({ lang, initialSearch = '' }: LibraryViewProps) {
   return (
     <div className="library-view">
       <div className="container">
+        <Breadcrumbs
+          items={[
+            { label: lang === 'tr' ? 'Ana Sayfa' : 'Home', path: '/' },
+            { label: t('nav_library', lang), path: '/library' },
+          ]}
+        />
         <div className="library-header">
           <h1 className="page-title">
             <i className="fa-solid fa-folder-tree"></i>

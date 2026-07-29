@@ -7,6 +7,7 @@ import { formatDate, formatTime, copyToClipboard } from '@/lib/utils';
 import { downloadProjectZip, downloadProjectJson, downloadFilesZip, createShareUrl } from '@/lib/download';
 import { generateTestSuite } from '@/lib/testgen/generateTests';
 import { CodeBlock } from './CodeBlock';
+import { Breadcrumbs } from './Breadcrumbs';
 
 const CodeEditorView = lazy(() => import('./CodeEditorView').then((m) => ({ default: m.CodeEditorView })));
 const CommentSection = lazy(() => import('./CommentSection').then((m) => ({ default: m.CommentSection })));
@@ -83,6 +84,13 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
     <div className="project-result">
       <div className="project-result-header">
         <div className="container">
+          <Breadcrumbs
+            items={[
+              { label: lang === 'tr' ? 'Ana Sayfa' : 'Home', path: '/' },
+              { label: t('nav_library', lang), path: '/library' },
+              { label: project.title, path: `/p/${project.slug}` },
+            ]}
+          />
           <button className="back-btn" onClick={() => navigate('/library')}>
             <i className="fa-solid fa-arrow-left"></i>
             {t('back', lang)}
