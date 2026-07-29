@@ -8,17 +8,28 @@
 // currently-versioned packages and real prior art instead of hallucinating
 // them.
 //
-// LLM PROVIDER: Groq (https://console.groq.com) — free tier, no credit card
-// required. Uses an OpenAI-compatible /chat/completions endpoint with JSON
-// mode. Swapped in to replace the paid Anthropic API, whose credit balance
-// ran out (see debug_logs "handler_catch" row from 2026-07-28: "Your credit
-// balance is too low to access the Anthropic API").
+// LLM PROVIDER CHAIN:
+//   1. Pollinations.ai (https://text.pollinations.ai/openai) — completely
+//      free, ANONYMOUS, no API key or signup required. This is the
+//      PRIMARY provider so the app works out of the box with zero secrets.
+//   2. GitHub repository fallback — if Pollinations fails (e.g. rate
+//      limited or down), the function searches GitHub's public, keyless
+//      repository-search API for a real open-source project matching the
+//      prompt, pulls a handful of its actual source files via the
+//      Contents API, and returns those as the "generated" project
+//      (clearly labelled as sourced from GitHub rather than freshly
+//      generated). This guarantees the endpoint basically never
+//      hard-fails with nothing to show the user.
 //
-// Required secret (set via `supabase secrets set` or the Dashboard):
-//   GROQ_API_KEY   — get a free key at https://console.groq.com/keys
+// (Previously used the paid Anthropic API, whose credit balance ran out,
+// then Groq. Groq was removed entirely on 2026-07-29 at the user's
+// request — it required a paid-signup API key they didn't want to
+// manage, and had been failing with "Invalid API Key" anyway.)
 //
-// Optional Edge Function secrets (all optional — raise rate limits only):
-//   GITHUB_API, GITLAB_API, BITBUCKET_API, STACKOVERFLOW_API
+// Optional Edge Function secrets (nothing is REQUIRED anymore):
+//   GITHUB_API, GITLAB_API, BITBUCKET_API, STACKOVERFLOW_API — optional,
+//     raise rate limits on the research lookups only (NOT used by the
+//     GitHub fallback provider, which is always anonymous by design)
 //
 // TEMP DEBUG: on any internal error, also inserts the real error message
 // into a `debug_logs` table (service-role only) so it can be inspected via
@@ -37,7 +48,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -83,11 +93,6 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    if (!GROQ_API_KEY) {
-      await debugLog('startup', 'GROQ_API_KEY is not set for this project.');
-      return json({ error: 'server_misconfigured', message: 'GROQ_API_KEY is not set for this project.' }, 500);
-    }
-
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) return json({ error: 'unauthorized' }, 401);
 
@@ -385,41 +390,185 @@ Rules for actual code generation:
 - Output raw JSON only. Do not wrap it in markdown code fences.`;
 
 async function callLLM(prompt: string, ecosystemContext: string): Promise<GenerationResult> {
+  const errors: string[] = [];
+
+  try {
+    return await callPollinations(prompt, ecosystemContext);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`Pollinations: ${msg}`);
+    await debugLog('pollinations_failed', msg);
+  }
+
+  // Groq disabled at user's request (2026-07-29) — was consistently
+  // failing with an invalid API key and the user does not want to
+  // manage a Groq key. Provider chain is now Pollinations -> GitHub only.
+
+  try {
+    return await buildFromGitHub(prompt);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`GitHub fallback: ${msg}`);
+    await debugLog('github_fallback_failed', msg);
+  }
+
+  throw new Error(`All providers failed. ${errors.join(' | ')}`);
+}
+
+function parseJsonFromModel(raw: string): GenerationResult {
+  const cleaned = (raw || '{}')
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```\s*$/, '');
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    throw new Error('Failed to parse model output as JSON: ' + cleaned.slice(0, 500));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider 1: Pollinations.ai — free, anonymous, no API key required.
+// OpenAI-compatible /openai endpoint. Anonymous tier is rate-limited to
+// roughly one request per 15s, which is fine for a single user action.
+// ---------------------------------------------------------------------------
+async function callPollinations(prompt: string, ecosystemContext: string): Promise<GenerationResult> {
   const userMessage = ecosystemContext ? `${prompt}\n\n${ecosystemContext}` : prompt;
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
+  const res = await fetchWithTimeout(
+    'https://text.pollinations.ai/openai',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'openai',
+        temperature: 0.3,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userMessage },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      // Free-tier model on Groq, strong at code generation.
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3,
-      max_tokens: 8000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  });
+    30000,
+  );
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Groq API error ${res.status}: ${text}`);
+    throw new Error(`Pollinations API error ${res.status}: ${text.slice(0, 500)}`);
   }
 
   const data = await res.json();
   const raw: string = data?.choices?.[0]?.message?.content?.trim() || '{}';
-  const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/, '');
+  return parseJsonFromModel(raw);
+}
 
-  let parsed: GenerationResult;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error('Failed to parse model output as JSON: ' + cleaned.slice(0, 500));
+// ---------------------------------------------------------------------------
+// Provider 2 (last resort): GitHub repository fallback — no API key needed.
+// Searches GitHub's public repository-search endpoint for a real project
+// matching the prompt, then pulls a handful of its actual source files via
+// the keyless Contents API. Used only if both AI providers above fail.
+// ---------------------------------------------------------------------------
+const CODE_FILE_EXTENSIONS = [
+  '.js', '.jsx', '.ts', '.tsx', '.py', '.php', '.java', '.go', '.rb',
+  '.rs', '.c', '.cpp', '.cs', '.html', '.css', '.json', '.md',
+];
+
+const EXCLUDED_PATH_SEGMENTS = [
+  'node_modules/', 'vendor/', 'dist/', 'build/', '.git/', 'test/', 'tests/',
+  '__tests__/', 'coverage/',
+];
+
+async function buildFromGitHub(prompt: string): Promise<GenerationResult> {
+  const keyword = extractKeyword(prompt);
+
+  // Deliberately NOT attaching GITHUB_API here even if the secret is set:
+  // this function is the last-resort, keyless fallback, and a stale/invalid
+  // GITHUB_API secret must never be able to break it. Anonymous GitHub API
+  // requests are rate-limited (60/hour) but that's plenty for a fallback path.
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'immaculate-ai' };
+
+  const searchRes = await fetchWithTimeout(
+    `https://api.github.com/search/repositories?q=${encodeURIComponent(keyword)}&sort=stars&order=desc&per_page=5`,
+    { headers },
+    8000,
+  );
+  if (!searchRes.ok) throw new Error(`GitHub repo search failed: ${searchRes.status}`);
+  const searchData = await searchRes.json();
+  const repos = (searchData.items || []) as Array<{
+    full_name: string;
+    default_branch: string;
+    html_url: string;
+    description: string | null;
+    language: string | null;
+    stargazers_count: number;
+  }>;
+  if (!repos.length) throw new Error('No matching public GitHub repositories found.');
+
+  // Try repos in order of stars until we find one we can pull real files from.
+  for (const repo of repos) {
+    try {
+      const treeRes = await fetchWithTimeout(
+        `https://api.github.com/repos/${repo.full_name}/git/trees/${repo.default_branch}?recursive=1`,
+        { headers },
+        8000,
+      );
+      if (!treeRes.ok) continue;
+      const treeData = await treeRes.json();
+      const allPaths: string[] = (treeData.tree || [])
+        .filter((n: { type: string; path: string }) => n.type === 'blob')
+        .map((n: { path: string }) => n.path);
+
+      const candidatePaths = allPaths
+        .filter((p) => CODE_FILE_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)))
+        .filter((p) => !EXCLUDED_PATH_SEGMENTS.some((seg) => p.toLowerCase().includes(seg)))
+        .slice(0, 8);
+      if (!candidatePaths.length) continue;
+
+      const files: GeneratedFile[] = [];
+      for (const path of candidatePaths.slice(0, 6)) {
+        const rawRes = await fetchWithTimeout(
+          `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch}/${path}`,
+          {},
+          8000,
+        );
+        if (!rawRes.ok) continue;
+        const content = await rawRes.text();
+        if (content.length > 50000) continue; // skip huge files
+        files.push({ path, content, language: languageFromPath(path) });
+        if (files.length >= 5) break;
+      }
+      if (!files.length) continue;
+
+      return {
+        is_code_request: true,
+        title: repo.full_name,
+        description:
+          (repo.description || `A real, existing open-source project matching your request.`) +
+          ` (Sourced live from the public GitHub repository ${repo.full_name} — both AI providers were temporarily unavailable, so this is real working code from an existing project rather than freshly generated code.)`,
+        category: 'web',
+        primary_language: repo.language || languageFromPath(files[0].path),
+        file_structure: files.map((f) => f.path).join('\n'),
+        files,
+        install_guide: `1. This project was pulled directly from ${repo.html_url}\n2. Clone or download the full repository: \`git clone https://github.com/${repo.full_name}.git\`\n3. Follow that repository's own README for setup and install instructions, since only a subset of files is shown here.`,
+        tags: [repo.language || 'code', 'github', 'fallback'],
+        performance_analysis: 'Not analyzed — this is existing third-party code pulled as a fallback, not freshly generated.',
+        seo_analysis: 'Not applicable — this is existing third-party code pulled as a fallback, not freshly generated.',
+      };
+    } catch {
+      continue;
+    }
   }
-  return parsed;
+
+  throw new Error('Found candidate repositories but could not retrieve usable source files from any of them.');
+}
+
+function languageFromPath(path: string): string {
+  const ext = path.toLowerCase().split('.').pop() || '';
+  const map: Record<string, string> = {
+    js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+    py: 'python', php: 'php', java: 'java', go: 'go', rb: 'ruby', rs: 'rust',
+    c: 'c', cpp: 'cpp', cs: 'csharp', html: 'html', css: 'css', json: 'json', md: 'markdown',
+  };
+  return map[ext] || 'plaintext';
 }
