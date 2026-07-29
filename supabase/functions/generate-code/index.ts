@@ -479,9 +479,74 @@ const EXCLUDED_PATH_SEGMENTS = [
   '__tests__/', 'coverage/',
 ];
 
+// English filler words to strip from a machine-translated prompt before
+// using it as a GitHub search query (translation tends to keep verbs like
+// "write"/"create" that add noise but no search signal).
+const ENGLISH_STOPWORDS = new Set([
+  'the', 'a', 'an', 'for', 'and', 'or', 'to', 'of', 'in', 'on', 'with',
+  'write', 'create', 'give', 'code', 'me', 'please', 'generate', 'make',
+  'build', 'app', 'application', 'project', 'system', 'complete', 'full',
+  'automatic', 'automatically', 'smart', 'want', 'need', 'can', 'you',
+]);
+
+// Free, keyless machine translation. Two providers, tried in order:
+//   1. Google Translate's public web-frontend endpoint
+//      (translate.googleapis.com) — the same unofficial endpoint used by
+//      popular libraries like googletrans / google-translate-api-x. No key,
+//      no official daily cap (unlike MyMemory's ~5000 chars/day), but
+//      unofficial and could be rate-limited by IP under heavy load.
+//   2. MyMemory (https://mymemory.translated.net) as a fallback — official
+//      free tier, ~5000 chars/day anonymous, 500 bytes/request.
+// Both are best-effort: if both fail, callers fall back to the other
+// (language-agnostic) query candidates below.
+async function translateViaGoogle(text: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(text)}`,
+      {},
+      5000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Response shape: [[[ "translated", "original", null, null, ... ], ...], ...]
+    const translated = (data?.[0] || [])
+      .map((seg: unknown[]) => seg?.[0])
+      .filter((s: unknown) => typeof s === 'string')
+      .join(' ');
+    return translated || null;
+  } catch {
+    return null;
+  }
+}
+
+async function translateViaMyMemory(text: string): Promise<string | null> {
+  try {
+    const truncated = text.slice(0, 400); // stay well under the 500-byte request cap
+    const res = await fetchWithTimeout(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(truncated)}&langpair=auto|en`,
+      {},
+      5000,
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText;
+    if (!translated || typeof translated !== 'string') return null;
+    if (/MYMEMORY WARNING|QUERY LENGTH LIMIT/i.test(translated)) return null;
+    return translated;
+  } catch {
+    return null;
+  }
+}
+
+async function translateToEnglish(text: string): Promise<string | null> {
+  const truncated = text.slice(0, 400);
+  return (await translateViaGoogle(truncated)) ?? (await translateViaMyMemory(truncated));
+}
+
 // A small set of borrowed/technical terms that survive translation and are
 // strong signals for what kind of repo to look for, even inside a Turkish
-// (or other non-English) sentence.
+// (or other non-English) sentence. Used as a secondary, language-agnostic
+// signal alongside the machine translation above.
 const KNOWN_TECH_TERMS = [
   'blogger', 'blogspot', 'wordpress', 'shopify', 'woocommerce', 'seo',
   'telegram', 'discord', 'whatsapp', 'instagram', 'twitter', 'facebook',
@@ -501,14 +566,31 @@ const TURKISH_STOPWORDS = new Set([
   'istiyorum', 'istedim', 'yapar', 'mısın', 'misin', 'otomatik', 'akıllı',
 ]);
 
-function buildGithubQueryCandidates(prompt: string): string[] {
+async function buildGithubQueryCandidates(prompt: string): Promise<string[]> {
+  const candidates: string[] = [];
+
+  // 1. Real machine translation (highest quality signal — e.g. "Mybb
+  //    Türkçe dil paketi" -> "Mybb Turkish language pack").
+  const translated = await translateToEnglish(prompt);
+  if (translated) {
+    const translatedWords = translated
+      .toLowerCase()
+      .replace(/[.,!?;:()"'`]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !ENGLISH_STOPWORDS.has(w));
+    if (translatedWords.length) {
+      candidates.push(translatedWords.slice(0, 4).join(' '));
+      candidates.push(translatedWords.slice(0, 2).join(' '));
+    }
+  }
+
+  // 2. Language-agnostic borrowed/technical terms, in case translation
+  //    failed or was rate-limited.
   const words = prompt
     .toLowerCase()
     .replace(/[.,!?;:()"'`]/g, ' ')
     .split(/\s+/)
     .filter(Boolean);
-
-  const candidates: string[] = [];
 
   const techHits = words.filter((w) => KNOWN_TECH_TERMS.includes(w));
   if (techHits.length) {
@@ -521,10 +603,10 @@ function buildGithubQueryCandidates(prompt: string): string[] {
     candidates.push(contentWords[0]);
   }
 
-  // Original naive 6-word phrase, in case the prompt is already in English.
+  // 3. Original naive 6-word phrase, in case the prompt is already in English.
   candidates.push(extractKeyword(prompt));
 
-  // Last-resort generic categories so this basically never comes up empty.
+  // 4. Last-resort generic categories so this basically never comes up empty.
   candidates.push('starter template', 'boilerplate');
 
   return [...new Set(candidates.map((c) => c.trim()).filter(Boolean))];
@@ -548,7 +630,7 @@ async function buildFromGitHub(prompt: string): Promise<GenerationResult> {
   //      words stripped out.
   //   3. A generic category fallback (e.g. "python automation") so the
   //      function essentially never comes up completely empty.
-  const queries = buildGithubQueryCandidates(prompt);
+  const queries = await buildGithubQueryCandidates(prompt);
 
   let repos: Array<{
     full_name: string;
