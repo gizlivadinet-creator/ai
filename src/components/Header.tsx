@@ -3,6 +3,7 @@ import { t } from '@/lib/i18n';
 import type { Language } from '@/lib/types';
 import { navigate } from '@/lib/router';
 import { useAuth } from '@/lib/auth';
+import { setGTranslateLanguage } from '@/lib/gtranslate';
 
 interface HeaderProps {
   lang: Language;
@@ -29,7 +30,7 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
   return (
     <header className="header" role="banner">
       <div className="header-inner">
-        <a href="/" className="logo" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
+        <a href="/" className="logo notranslate" translate="no" onClick={(e) => { e.preventDefault(); navigate('/'); }}>
           <i className="fa-solid fa-code logo-icon"></i>
           <span className="logo-text">Immaculate<span className="logo-accent">AI</span></span>
         </a>
@@ -84,8 +85,13 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
             </div>
           )}
           <button
-            className="lang-toggle"
-            onClick={() => onLangChange(lang === 'tr' ? 'en' : 'tr')}
+            className="lang-toggle notranslate"
+            translate="no"
+            onClick={() => {
+              const next: Language = lang === 'tr' ? 'en' : 'tr';
+              onLangChange(next);
+              setGTranslateLanguage(next);
+            }}
             aria-label="Language"
             title={lang === 'tr' ? 'English' : 'Türkçe'}
           >

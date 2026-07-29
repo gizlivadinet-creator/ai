@@ -42,7 +42,7 @@ export function CodeBlock({ path, content, language, lang }: CodeBlockProps) {
           </button>
         </div>
       </div>
-      <pre ref={preRef} className="code-content">
+      <pre ref={preRef} className="code-content notranslate" translate="no">
         <code>{content}</code>
       </pre>
     </div>
