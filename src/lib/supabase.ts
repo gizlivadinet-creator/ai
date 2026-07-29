@@ -107,7 +107,16 @@ export function escapeIlikeValue(raw: string): string {
     .replace(/"/g, '\\"');
 }
 
-/** Starts the Google OAuth sign-in flow (redirects back to the current hash route). */
+/**
+ * Legacy redirect-based Google sign-in. Kept only as a fallback: this flow
+ * sends the browser to `${SUPABASE_URL}/auth/v1/authorize`, so the Google
+ * account-chooser screen shows the raw `*.supabase.co` project domain
+ * instead of our own site name/logo — that "select an account" screen
+ * always reflects the redirect_uri's actual domain, and on the Free plan
+ * (no custom domain for the auth server) there is no branding config that
+ * overrides it. Prefer `signInWithGoogleIdToken` (used by
+ * `GoogleSignInButton`) which avoids this entirely.
+ */
 export async function signInWithGoogle() {
   const redirectTo = window.location.origin + window.location.pathname;
   const { error } = await supabase.auth.signInWithOAuth({
@@ -116,6 +125,23 @@ export async function signInWithGoogle() {
       redirectTo,
       queryParams: { access_type: 'online', prompt: 'select_account' },
     },
+  });
+  if (error) throw error;
+}
+
+/**
+ * Signs in using a Google ID token obtained client-side via Google Identity
+ * Services (see GoogleSignInButton.tsx). Because the whole flow runs on our
+ * own origin (immaculate.eu.cc) instead of redirecting through
+ * `${SUPABASE_URL}/auth/v1/authorize`, Google's account chooser and consent
+ * screens show our own app name/logo (as configured in Google Cloud Console
+ * → OAuth consent screen → Branding) instead of the supabase.co domain.
+ * This works on the Supabase Free plan — no custom domain add-on required.
+ */
+export async function signInWithGoogleIdToken(idToken: string) {
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken,
   });
   if (error) throw error;
 }
