@@ -2,10 +2,12 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
-// GitHub Pages project site: https://gizlivadinet-creator.github.io/ai/
-// Relative base works with hash-based routing and survives subpath deployment.
+// Served from a custom domain (see public/CNAME: immaculate.eu.cc) at the
+// site root, so asset paths must be absolute. Do not change this back to a
+// relative base — with path-based routing (/p/slug, /library, ...) a
+// relative base resolves assets against the wrong directory depth.
 export default defineConfig({
-  base: './',
+  base: '/',
   plugins: [react()],
   resolve: {
     alias: {

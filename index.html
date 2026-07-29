@@ -3,6 +3,21 @@
   <head>
     <meta charset="UTF-8" />
 
+    <script>
+      // Reverses the redirect performed by public/404.html: if we were
+      // bounced here from an unknown deep path (e.g. /p/my-project), swap
+      // the URL back to the real, clean path *before* the app or any SEO
+      // tags below read window.location, using replaceState so it never
+      // shows up as an extra history entry.
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var redirect = params.get('redirect');
+        if (redirect) {
+          history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -32,14 +47,14 @@
 
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 
-    <link rel="canonical" href="https://immaculate-ai.app/" />
+    <link rel="canonical" href="https://immaculate.eu.cc/" />
 
     <!-- Open Graph -->
 
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="tr_TR" />
     <meta property="og:site_name" content="Immaculate AI" />
-    <meta property="og:url" content="https://immaculate-ai.app/" />
+    <meta property="og:url" content="https://immaculate.eu.cc/" />
 
     <meta
       property="og:title"
@@ -53,12 +68,12 @@
 
     <meta
       property="og:image"
-      content="https://immaculate-ai.app/og-image.webp"
+      content="https://immaculate.eu.cc/og-image.webp"
     />
 
     <meta
       property="og:image:secure_url"
-      content="https://immaculate-ai.app/og-image.webp"
+      content="https://immaculate.eu.cc/og-image.webp"
     />
 
     <meta property="og:image:type" content="image/webp" />
@@ -81,7 +96,7 @@
 
     <meta
       name="twitter:image"
-      content="https://immaculate-ai.app/og-image.webp"
+      content="https://immaculate.eu.cc/og-image.webp"
     />
 
     <!-- Performance -->
@@ -108,24 +123,24 @@
         {
           "@type":"Organization",
           "name":"Immaculate AI",
-          "url":"https://immaculate-ai.app",
-          "logo":"https://immaculate-ai.app/logo.png"
+          "url":"https://immaculate.eu.cc",
+          "logo":"https://immaculate.eu.cc/logo.png"
         },
         {
           "@type":"WebSite",
           "name":"Immaculate AI",
-          "url":"https://immaculate-ai.app",
+          "url":"https://immaculate.eu.cc",
           "inLanguage":"tr",
           "potentialAction":{
             "@type":"SearchAction",
-            "target":"https://immaculate-ai.app/search?q={search_term_string}",
+            "target":"https://immaculate.eu.cc/search?q={search_term_string}",
             "query-input":"required name=search_term_string"
           }
         },
         {
           "@type":"WebApplication",
           "name":"Immaculate AI",
-          "url":"https://immaculate-ai.app",
+          "url":"https://immaculate.eu.cc",
           "applicationCategory":"DeveloperApplication",
           "operatingSystem":"Web",
           "inLanguage":"tr",
