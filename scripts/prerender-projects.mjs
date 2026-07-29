@@ -87,7 +87,10 @@ function buildProjectMeta(project, path) {
 
   const jsonLd = [
     {
-      '@type': 'TechArticle',
+      // Keep in sync with src/lib/seo.ts: multi-typed because
+      // `programmingLanguage` is only a valid property on SoftwareSourceCode
+      // per schema.org, not on Article/TechArticle alone.
+      '@type': ['TechArticle', 'SoftwareSourceCode'],
       headline: title,
       description,
       articleSection: project.category,
@@ -187,9 +190,36 @@ function main() {
     process.exit(0);
   }
 
-  const baseHtml = readFileSync(INDEX_HTML_PATH, 'utf-8');
+  // Defensive: strip any pre-existing "route-jsonld" script from the base
+  // template first. index.html should never already contain one, but this
+  // guarantees renderProjectHtml() can never end up inserting a second copy
+  // alongside a leftover one, whatever produced it.
+  const rawBaseHtml = readFileSync(INDEX_HTML_PATH, 'utf-8');
+  const baseHtml = rawBaseHtml.replace(
+    /\s*<script type="application\/ld\+json" id="route-jsonld">[\s\S]*?<\/script>/,
+    '',
+  );
+
   const manifest = JSON.parse(readFileSync(PROJECTS_JSON_PATH, 'utf-8'));
-  const projects = Array.isArray(manifest.projects) ? manifest.projects : [];
+  const allProjects = Array.isArray(manifest.projects) ? manifest.projects : [];
+
+  // Defensive: de-duplicate by slug. Two rows sharing a slug would otherwise
+  // both write to the same dist/p/<slug>/index.html; keeping only the most
+  // recently updated one avoids ambiguity about which project's data "wins".
+  const bySlug = new Map();
+  for (const project of allProjects) {
+    if (!project || !project.slug) continue;
+    const existing = bySlug.get(project.slug);
+    if (!existing || new Date(project.updated_at || 0) >= new Date(existing.updated_at || 0)) {
+      bySlug.set(project.slug, project);
+    }
+  }
+  const projects = [...bySlug.values()];
+  if (projects.length !== allProjects.filter((p) => p && p.slug).length) {
+    console.warn(
+      `Uyarı: aynı slug'a sahip yinelenen proje kayıtları bulundu ve tekilleştirildi (${allProjects.length} -> ${projects.length}).`,
+    );
+  }
 
   let written = 0;
   for (const project of projects) {
