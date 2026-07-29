@@ -479,30 +479,100 @@ const EXCLUDED_PATH_SEGMENTS = [
   '__tests__/', 'coverage/',
 ];
 
-async function buildFromGitHub(prompt: string): Promise<GenerationResult> {
-  const keyword = extractKeyword(prompt);
+// A small set of borrowed/technical terms that survive translation and are
+// strong signals for what kind of repo to look for, even inside a Turkish
+// (or other non-English) sentence.
+const KNOWN_TECH_TERMS = [
+  'blogger', 'blogspot', 'wordpress', 'shopify', 'woocommerce', 'seo',
+  'telegram', 'discord', 'whatsapp', 'instagram', 'twitter', 'facebook',
+  'chatbot', 'bot', 'crm', 'cms', 'ecommerce', 'sitemap', 'rss',
+  'python', 'javascript', 'typescript', 'php', 'java', 'react', 'vue',
+  'node', 'django', 'flask', 'laravel', 'nextjs', 'api', 'rest',
+  'scraper', 'crawler', 'automation', 'extension', 'plugin', 'addon',
+  'template', 'dashboard', 'admin', 'panel', 'game', 'oyun',
+];
 
+// Common Turkish filler/verb words that add noise to a GitHub search query
+// and should be stripped before falling back to "first content word".
+const TURKISH_STOPWORDS = new Set([
+  've', 'veya', 'ile', 'için', 'olan', 'olsun', 'gibi', 'bir', 'bu', 'şu',
+  'de', 'da', 'ki', 'ise', 'ver', 'yap', 'yaz', 'oluştur', 'oluştur.',
+  'kodu', 'kod', 'sistem', 'tam', 'eksiksiz', 'lütfen', 'bana', 'benim',
+  'istiyorum', 'istedim', 'yapar', 'mısın', 'misin', 'otomatik', 'akıllı',
+]);
+
+function buildGithubQueryCandidates(prompt: string): string[] {
+  const words = prompt
+    .toLowerCase()
+    .replace(/[.,!?;:()"'`]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const candidates: string[] = [];
+
+  const techHits = words.filter((w) => KNOWN_TECH_TERMS.includes(w));
+  if (techHits.length) {
+    candidates.push([...new Set(techHits)].slice(0, 3).join(' '));
+  }
+
+  const contentWords = words.filter((w) => !TURKISH_STOPWORDS.has(w) && w.length > 2);
+  if (contentWords.length) {
+    candidates.push(contentWords.slice(0, 3).join(' '));
+    candidates.push(contentWords[0]);
+  }
+
+  // Original naive 6-word phrase, in case the prompt is already in English.
+  candidates.push(extractKeyword(prompt));
+
+  // Last-resort generic categories so this basically never comes up empty.
+  candidates.push('starter template', 'boilerplate');
+
+  return [...new Set(candidates.map((c) => c.trim()).filter(Boolean))];
+}
+
+async function buildFromGitHub(prompt: string): Promise<GenerationResult> {
   // Deliberately NOT attaching GITHUB_API here even if the secret is set:
   // this function is the last-resort, keyless fallback, and a stale/invalid
   // GITHUB_API secret must never be able to break it. Anonymous GitHub API
   // requests are rate-limited (60/hour) but that's plenty for a fallback path.
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'immaculate-ai' };
 
-  const searchRes = await fetchWithTimeout(
-    `https://api.github.com/search/repositories?q=${encodeURIComponent(keyword)}&sort=stars&order=desc&per_page=5`,
-    { headers },
-    8000,
-  );
-  if (!searchRes.ok) throw new Error(`GitHub repo search failed: ${searchRes.status}`);
-  const searchData = await searchRes.json();
-  const repos = (searchData.items || []) as Array<{
+  // The raw prompt is often in Turkish (or another non-English language)
+  // and a literal 6-word phrase almost never matches any real repo name or
+  // description. Instead we try several increasingly-broad query
+  // candidates and use the first one that returns results:
+  //   1. Known tech/CMS keywords detected in the prompt (language-agnostic,
+  //      e.g. "blogger", "seo", "wordpress", "telegram bot" survive
+  //      translation because they're proper nouns / borrowed terms).
+  //   2. The first content word of the prompt with common Turkish filler
+  //      words stripped out.
+  //   3. A generic category fallback (e.g. "python automation") so the
+  //      function essentially never comes up completely empty.
+  const queries = buildGithubQueryCandidates(prompt);
+
+  let repos: Array<{
     full_name: string;
     default_branch: string;
     html_url: string;
     description: string | null;
     language: string | null;
     stargazers_count: number;
-  }>;
+  }> = [];
+
+  for (const q of queries) {
+    const searchRes = await fetchWithTimeout(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=5`,
+      { headers },
+      8000,
+    );
+    if (!searchRes.ok) continue;
+    const searchData = await searchRes.json();
+    const items = (searchData.items || []) as typeof repos;
+    if (items.length) {
+      repos = items;
+      break;
+    }
+  }
   if (!repos.length) throw new Error('No matching public GitHub repositories found.');
 
   // Try repos in order of stars until we find one we can pull real files from.
