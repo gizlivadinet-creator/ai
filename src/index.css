@@ -497,7 +497,11 @@ img, video, svg, canvas { max-width: 100%; height: auto; }
   gap: 24px; flex-wrap: wrap;
 }
 .project-result-title { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; margin: 12px 0 8px; color: var(--text); }
-.project-result-desc { color: var(--text-muted); margin-bottom: 16px; max-width: 600px; }
+.project-result-desc {
+  color: var(--text-muted); margin-bottom: 16px; max-width: 600px;
+  max-height: 160px; overflow-y: auto; overflow-wrap: break-word; word-break: break-word;
+  white-space: pre-wrap; padding-right: 6px;
+}
 .project-result-meta {
   display: flex; flex-wrap: wrap; gap: 18px;
   font-size: 0.85rem; color: var(--text-muted);
@@ -576,6 +580,7 @@ img, video, svg, canvas { max-width: 100%; height: auto; }
 @media (max-width: 640px) {
   .summary-description { max-height: 140px; }
   .prompt-text { max-height: 110px; }
+  .project-result-desc { max-height: 120px; }
 }
 
 /* ===== STRUCTURE PANEL ===== */
