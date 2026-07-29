@@ -120,6 +120,18 @@ img, video, svg, canvas { max-width: 100%; height: auto; }
   border: none; background: none; outline: none;
   font-size: 0.875rem; width: 100%; color: var(--text);
 }
+/* GTranslate (https://gtranslate.io/) runs headless: the visible switcher
+   is the app's own .lang-toggle button (see Header.tsx + lib/gtranslate.ts),
+   so the widget's default dropdown/flags UI and Google's injected banner
+   iframe are hidden here rather than shown. */
+.gtranslate_wrapper { display: none !important; }
+.goog-te-banner-frame,
+.goog-te-balloon-frame,
+.skiptranslate > iframe { display: none !important; visibility: hidden !important; }
+body { top: 0 !important; position: static !important; }
+.goog-tooltip, .goog-tooltip:hover { display: none !important; }
+.goog-text-highlight { background: none !important; box-shadow: none !important; }
+
 .lang-toggle {
   display: flex; align-items: center; gap: 6px;
   padding: 7px 12px; border-radius: var(--radius-sm);

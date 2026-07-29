@@ -4,6 +4,7 @@ import { applyRouteSeo } from '@/lib/seo';
 import { t } from '@/lib/i18n';
 import type { Language } from '@/lib/types';
 import { AuthProvider } from '@/lib/auth';
+import { getInitialLanguage } from '@/lib/gtranslate';
 import { Header } from '@/components/Header';
 import { HomeView } from '@/components/HomeView';
 import { LibraryView } from '@/components/LibraryView';
@@ -15,9 +16,7 @@ import { useProject } from '@/lib/hooks';
 
 function App() {
   const route = useRouter();
-  const [lang, setLang] = useState<Language>(() => {
-    return (localStorage.getItem('immaculate-lang') as Language) || 'tr';
-  });
+  const [lang, setLang] = useState<Language>(() => getInitialLanguage());
 
   useEffect(() => {
     localStorage.setItem('immaculate-lang', lang);
