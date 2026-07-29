@@ -87,6 +87,36 @@ Deno.serve(async (req: Request) => {
       if (!url) return json({ error: 'url_required' }, 400);
       if (!/^https?:\/\//i.test(url)) return json({ error: 'invalid_url' }, 400);
 
+      const repo = parseGithubRepoUrl(url);
+      if (repo) {
+        try {
+          const repoContent = await fetchFullGithubRepo(repo.owner, repo.repo);
+          const [title, description] = await Promise.all([
+            translateToTurkish(repoContent.title),
+            translateToTurkish(repoContent.description),
+          ]);
+          // The repository's actual source code is left UNTRANSLATED on
+          // purpose — machine-translating code/identifiers would corrupt
+          // it and make it unusable. Only the natural-language title and
+          // repo description are translated; every file's real content
+          // (including README prose) is returned exactly as committed so
+          // nothing is altered or lost.
+          return json({
+            result: {
+              title: title || repoContent.title,
+              description: description || repoContent.description,
+              content: repoContent.content,
+              url,
+            },
+          });
+        } catch (err) {
+          console.error('search-sources github repo fetch failed:', err);
+          // Fall through to the generic single-page fetch below so the
+          // user still gets *something* (the repo's landing-page text)
+          // instead of a hard failure.
+        }
+      }
+
       try {
         const page = await fetchFullPageText(url);
         const [title, description, content] = await Promise.all([
@@ -264,6 +294,170 @@ async function searchGithub(q: string): Promise<SourceResult[]> {
     url: r.html_url,
     snippet: r.description ?? '',
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Full GitHub repository fetch ("GitHub deposuna ne varsa tümünü eksiksiz
+// çek") — pulls the ENTIRE file tree of the repo's default branch and the
+// real text content of every non-binary file, not just the landing page.
+// Uses the keyless (or, if GITHUB_API is set, higher-rate-limited) REST API
+// for metadata/tree, and raw.githubusercontent.com for the actual file
+// bytes (faster than the base64 Contents API and doesn't burn its rate
+// limit budget separately).
+// ---------------------------------------------------------------------------
+
+interface GithubRepoRef {
+  owner: string;
+  repo: string;
+}
+
+// Recognizes a repo URL (https://github.com/{owner}/{repo}[/...]) and
+// rejects non-repo GitHub URLs (profiles, search, topics, etc.) so those
+// fall through to the generic single-page fetch instead.
+function parseGithubRepoUrl(url: string): GithubRepoRef | null {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)github\.com$/i.test(u.hostname)) return null;
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    const [owner, repoRaw] = parts;
+    const NON_REPO_SEGMENTS = new Set([
+      'search', 'topics', 'marketplace', 'sponsors', 'orgs', 'settings',
+      'notifications', 'issues', 'pulls', 'explore', 'trending', 'collections',
+    ]);
+    if (NON_REPO_SEGMENTS.has(owner.toLowerCase())) return null;
+    const repo = repoRaw.replace(/\.git$/, '');
+    return { owner, repo };
+  } catch {
+    return null;
+  }
+}
+
+const GITHUB_BINARY_EXT = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'bmp', 'avif',
+  'woff', 'woff2', 'ttf', 'eot', 'otf',
+  'mp3', 'mp4', 'mov', 'avi', 'webm', 'ogg', 'wav', 'flac',
+  'zip', 'tar', 'gz', '7z', 'rar', 'jar', 'war',
+  'pdf', 'psd', 'ai', 'sketch', 'fig',
+  'exe', 'dll', 'so', 'dylib', 'bin', 'wasm', 'class', 'pyc',
+]);
+
+const GITHUB_SKIP_PATH_SEGMENTS = [
+  'node_modules/', 'vendor/', 'dist/', 'build/', '.git/', 'coverage/',
+  '.next/', '.nuxt/', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+];
+
+// Safety ceilings — exist only so a single enormous monorepo can't time out
+// or OOM the edge function. Every real-world small/medium repo (the vast
+// majority of what people search for) is fetched 100% completely; these
+// numbers are far above a typical repo's total text size.
+const GITHUB_MAX_FILES = 150;
+const GITHUB_MAX_FILE_BYTES = 80_000; // skip any single file bigger than this (almost always generated/vendored)
+const GITHUB_MAX_TOTAL_BYTES = 1_200_000; // whole-repo cap across all files combined
+const GITHUB_FETCH_CONCURRENCY = 10;
+
+interface GithubFullRepo {
+  title: string;
+  description: string;
+  content: string;
+}
+
+async function fetchFullGithubRepo(owner: string, repo: string): Promise<GithubFullRepo> {
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
+  if (GITHUB_API) headers.Authorization = `Bearer ${GITHUB_API}`;
+
+  const meta = await fetchJson(`https://api.github.com/repos/${owner}/${repo}`, headers);
+  const defaultBranch: string = meta?.default_branch || 'main';
+
+  const treeData = await fetchJson(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`,
+    headers,
+  );
+
+  const allBlobs: { path: string; size: number }[] = (treeData?.tree ?? [])
+    .filter((n: any) => n.type === 'blob')
+    .map((n: any) => ({ path: n.path as string, size: (n.size as number) ?? 0 }));
+
+  const truncatedTree = treeData?.truncated === true;
+
+  const candidates = allBlobs.filter((f) => {
+    const lower = f.path.toLowerCase();
+    if (GITHUB_SKIP_PATH_SEGMENTS.some((seg) => lower.includes(seg))) return false;
+    const ext = lower.includes('.') ? lower.split('.').pop()! : '';
+    if (GITHUB_BINARY_EXT.has(ext)) return false;
+    if (f.size > GITHUB_MAX_FILE_BYTES) return false;
+    return true;
+  });
+
+  // README and top-level docs first, so if the total-size ceiling is ever
+  // hit on a huge repo, the most important files are already included.
+  candidates.sort((a, b) => {
+    const rank = (p: string) => {
+      const lower = p.toLowerCase();
+      if (/^readme/.test(lower)) return 0;
+      if (!lower.includes('/')) return 1;
+      if (/^(docs|documentation)\//.test(lower)) return 2;
+      return 3;
+    };
+    return rank(a.path) - rank(b.path) || a.path.localeCompare(b.path);
+  });
+
+  const selected = candidates.slice(0, GITHUB_MAX_FILES);
+  const fileTexts: { path: string; text: string }[] = [];
+  let totalBytes = 0;
+  let skippedForSize = 0;
+
+  for (let i = 0; i < selected.length; i += GITHUB_FETCH_CONCURRENCY) {
+    if (totalBytes >= GITHUB_MAX_TOTAL_BYTES) {
+      skippedForSize += selected.length - i;
+      break;
+    }
+    const batch = selected.slice(i, i + GITHUB_FETCH_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (f) => {
+        try {
+          const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(defaultBranch)}/${f.path
+            .split('/')
+            .map(encodeURIComponent)
+            .join('/')}`;
+          const res = await fetchWithTimeout(rawUrl, {}, 10000);
+          if (!res.ok) return null;
+          const text = await res.text();
+          return { path: f.path, text };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const r of batchResults) {
+      if (!r) continue;
+      if (totalBytes + r.text.length > GITHUB_MAX_TOTAL_BYTES) {
+        skippedForSize++;
+        continue;
+      }
+      fileTexts.push(r);
+      totalBytes += r.text.length;
+    }
+  }
+
+  // NOTE: file contents are intentionally NOT translated (machine-
+  // translating source code would corrupt identifiers/syntax and make it
+  // unusable) — they're returned byte-for-byte as committed to the repo.
+  const parts = fileTexts.map((f) => `\n\n### ${f.path}\n\n${f.text.trim()}`);
+  const content =
+    `Depo: ${meta?.full_name ?? `${owner}/${repo}`}\n` +
+    `Varsayılan dal: ${defaultBranch}\n` +
+    `Yıldız: ${meta?.stargazers_count ?? 0} · Fork: ${meta?.forks_count ?? 0} · Ana dil: ${meta?.language ?? 'bilinmiyor'}\n` +
+    `Ağaçta toplam ${allBlobs.length} dosya bulundu; ikili/çok büyük/üretilmiş dosyalar hariç tutularak ${fileTexts.length} dosyanın tam içeriği aşağıdadır` +
+    (skippedForSize > 0 ? ` (toplam boyut güvenlik sınırı nedeniyle ${skippedForSize} dosya bu sefer atlandı)` : '') +
+    (truncatedTree ? '\n(Not: GitHub API bu depoyu çok büyük bulup dosya ağacını kendi tarafında kısaltmış olabilir.)' : '') +
+    parts.join('');
+
+  return {
+    title: meta?.full_name ?? `${owner}/${repo}`,
+    description: meta?.description ?? '',
+    content,
+  };
 }
 
 async function searchBitbucket(q: string): Promise<SourceResult[]> {
