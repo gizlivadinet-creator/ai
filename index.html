@@ -212,5 +212,27 @@
     </script>
 
     <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      GTranslate (https://gtranslate.io/) website translator.
+      The visible language switcher in the app header is custom-built and
+      drives this widget programmatically (see src/lib/gtranslate.ts) via
+      the standard `googtrans` cookie, so this default wrapper stays
+      visually hidden (see .gtranslate_wrapper in index.css) — it only
+      needs to exist in the DOM for the widget script to attach to and
+      perform the actual translation.
+    -->
+    <div class="gtranslate_wrapper notranslate"></div>
+    <script>
+      window.gtranslateSettings = {
+        default_language: 'tr',
+        languages: ['tr', 'en'],
+        wrapper_selector: '.gtranslate_wrapper',
+        flag_style: '3d',
+        alt_flags: {},
+        switcher_horizontal_position: 'inline'
+      };
+    </script>
+    <script src="https://cdn.gtranslate.net/widgets/latest/dwf.js" defer></script>
   </body>
 </html>
