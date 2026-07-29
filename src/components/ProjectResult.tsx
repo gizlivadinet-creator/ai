@@ -273,7 +273,7 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
                   <i className="fa-solid fa-lightbulb"></i>
                   <div>
                     <h4>{t('project_summary', lang)}</h4>
-                    <p>{project.description}</p>
+                    <p className="summary-description">{project.description}</p>
                   </div>
                 </div>
                 <div className="summary-item">
