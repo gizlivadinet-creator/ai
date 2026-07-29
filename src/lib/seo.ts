@@ -161,7 +161,14 @@ export function applyRouteSeo(route: Route, opts: { project?: Project; lang?: 't
         path,
         jsonLd: [
           {
-            '@type': 'TechArticle',
+            // Multi-typed: `programmingLanguage` is only valid on
+            // SoftwareSourceCode per schema.org (schema.org/programmingLanguage
+            // lists SoftwareSourceCode/WebAPI/ComputerLanguage as its domain,
+            // not Article/TechArticle). Combining both types keeps the
+            // article semantics while making every property below valid,
+            // instead of the validator flagging an unrecognized-property
+            // warning on TechArticle.
+            '@type': ['TechArticle', 'SoftwareSourceCode'],
             headline: p.title,
             description,
             articleSection: p.category,
