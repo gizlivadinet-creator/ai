@@ -82,9 +82,15 @@ function ExternalResultRow({ result }: ExternalResultRowProps) {
 
       {expanded && !loading && full && (
         <div className="result-full-content">
-          {full.content.split('\n').filter(Boolean).map((paragraph, idx) => (
-            <p key={idx}>{paragraph}</p>
-          ))}
+          {result.source === 'github' ? (
+            // Full repo dumps are headed sections of raw file content
+            // ("### path/to/file") — rendered preformatted so code
+            // indentation/formatting survives, instead of being flattened
+            // into <p> tags line by line.
+            <pre className="result-full-content-code">{full.content}</pre>
+          ) : (
+            full.content.split('\n').filter(Boolean).map((paragraph, idx) => <p key={idx}>{paragraph}</p>)
+          )}
         </div>
       )}
     </li>
