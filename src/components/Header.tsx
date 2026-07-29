@@ -4,7 +4,6 @@ import type { Language } from '@/lib/types';
 import { navigate } from '@/lib/router';
 import { useAuth } from '@/lib/auth';
 import { setGTranslateLanguage } from '@/lib/gtranslate';
-import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 
 interface HeaderProps {
   lang: Language;
@@ -14,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
-  const { user, profile, loading, isAdmin, isBanned, signOut } = useAuth();
+  const { user, profile, loading, isAdmin, isBanned, signIn, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -100,7 +99,12 @@ export function Header({ lang, onLangChange, current, onSearch }: HeaderProps) {
             <span>{lang === 'tr' ? 'TR' : 'EN'}</span>
           </button>
 
-          {!loading && !user && <GoogleSignInButton lang={lang} />}
+          {!loading && !user && (
+            <button className="btn-google-signin" onClick={() => signIn()}>
+              <GoogleIcon />
+              <span>{t('sign_in_google', lang)}</span>
+            </button>
+          )}
 
           {!loading && user && (
             <div className="user-menu" ref={menuRef}>
