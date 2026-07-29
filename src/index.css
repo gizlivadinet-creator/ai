@@ -340,6 +340,10 @@ img, video, svg, canvas { max-width: 100%; height: auto; }
 }
 .result-full-content p { margin: 0 0 10px; }
 .result-full-content p:last-child { margin-bottom: 0; }
+.result-full-content-code {
+  white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono, monospace);
+  font-size: 12px; line-height: 1.55; margin: 0;
+}
 
 .tests-empty {
   text-align: center; padding: 60px 20px; color: var(--text-light);
