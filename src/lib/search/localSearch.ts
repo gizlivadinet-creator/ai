@@ -42,10 +42,22 @@ export function fuzzySearch(projects: Project[], query: string, limit = 30): Loc
     }));
 }
 
+// Cosine similarity between two arbitrary, unrelated MiniLM sentence
+// embeddings still tends to land around 0.1-0.3 (it is *never* near zero),
+// simply because the model shares general "this is English text" structure
+// across everything. Without a floor, semanticSearch used to score and
+// return *every* project no matter how unrelated, and hybridSearch below
+// blended that noise into every result with a fixed 0.6 weight — so a
+// completely unrelated project could outrank a real fuzzy/title match.
+// This threshold is what actually correlates with a topical match for this
+// model in practice.
+const SEMANTIC_MIN_SIMILARITY = 0.35;
+
 /**
  * Semantic search using free, local (in-browser) embeddings. Slower on
  * first call per project (has to embed), then cached. Falls back silently
- * to an empty result set if the model can't load (e.g. offline).
+ * to an empty result set if the model can't load (e.g. offline). Results
+ * below SEMANTIC_MIN_SIMILARITY are dropped as noise rather than returned.
  */
 export async function semanticSearch(
   projects: Project[],
@@ -66,7 +78,9 @@ export async function semanticSearch(
         setCachedEmbedding(project.id, content, vec);
       }
       const score = cosineSimilarity(queryVec, vec);
-      scored.push({ project, score, matchType: 'semantic' });
+      if (score >= SEMANTIC_MIN_SIMILARITY) {
+        scored.push({ project, score, matchType: 'semantic' });
+      }
     }
 
     scored.sort((a, b) => b.score - a.score);
@@ -91,8 +105,18 @@ export async function hybridSearch(
   const { limit = 30, semanticWeight = 0.6 } = opts;
   if (!query.trim()) return [];
 
-  const fuzzyResults = fuzzySearch(projects, query, projects.length);
-  const semanticResults = await semanticSearch(projects, query, projects.length);
+  // Defensive de-dup: if the caller's list ever contains the same project
+  // twice (e.g. a stale realtime update landed alongside a fresh fetch),
+  // don't let it appear twice in results.
+  const seen = new Set<string>();
+  const uniqueProjects = projects.filter((p) => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+
+  const fuzzyResults = fuzzySearch(uniqueProjects, query, uniqueProjects.length);
+  const semanticResults = await semanticSearch(uniqueProjects, query, uniqueProjects.length);
 
   const byId = new Map<string, LocalSearchResult>();
 
