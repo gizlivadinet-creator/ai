@@ -136,11 +136,45 @@ export function ProjectResult({ project, lang }: ProjectResultProps) {
     }
   }
 
-  async function handleShare() {
-    const url = createShareUrl(project);
+  async function copyShareLinkFallback(url: string) {
     await copyToClipboard(url);
     setShareCopied(true);
     setTimeout(() => setShareCopied(false), 2500);
+  }
+
+  async function handleShare() {
+    const url = createShareUrl(project);
+    const shareData: ShareData = {
+      title: project.title,
+      text: project.description || project.title,
+      url,
+    };
+
+    // Mobile browsers (Chrome/Brave/Safari on Android & iOS) implement the
+    // Web Share API: navigator.share() hands off to the OS's native share
+    // sheet, which lists WhatsApp, Messenger, Facebook, Messages, Mail, etc.
+    // — exactly like sharing a link from any other app. Desktop browsers and
+    // older mobile browsers don't support it, so we fall back to the
+    // previous copy-link-to-clipboard behavior in that case.
+    const canUseNativeShare =
+      typeof navigator !== 'undefined' &&
+      typeof navigator.share === 'function' &&
+      (typeof navigator.canShare !== 'function' || navigator.canShare(shareData));
+
+    if (canUseNativeShare) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        // AbortError just means the person closed the share sheet without
+        // picking anything — not a failure, so it needs no fallback/toast.
+        if (err instanceof Error && err.name !== 'AbortError') {
+          await copyShareLinkFallback(url);
+        }
+      }
+      return;
+    }
+
+    await copyShareLinkFallback(url);
   }
 
   async function handleDownloadZip() {
